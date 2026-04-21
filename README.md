@@ -4,7 +4,39 @@ Multi-tenant RAG (Retrieval-Augmented Generation) infrastructure using AWS Bedro
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### For Backend Developers - Use the REST API
+
+The fastest way to query the RAG system is via our REST API endpoint:
+
+**API Endpoint:** `https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query`
+
+```bash
+# 1. Get your API key (ask admin)
+aws apigateway get-api-key --api-key 6a0h023lec --include-value --query 'value' --output text
+
+# 2. Make a query
+curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -d '{"question": "What documents do you have?"}'
+
+# Response
+{
+  "answer": "I have documents about...",
+  "sessionId": "abc-123-def",
+  "status": "success"
+}
+```
+
+📖 **Documentation:**
+- **Quick Reference:** [docs/API_QUICKREF.md](docs/API_QUICKREF.md) - One-page cheat sheet
+- **Complete API Guide:** [docs/API_USAGE.md](docs/API_USAGE.md) - Full reference with error handling, rate limits, and advanced usage
+
+---
+
+### For Infrastructure Developers
+
+#### Prerequisites
 
 - AWS CLI configured with credentials
 - AWS CDK installed (`npm install -g aws-cdk`)
@@ -15,7 +47,7 @@ Multi-tenant RAG (Retrieval-Augmented Generation) infrastructure using AWS Bedro
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Document Ingestion                          │
+│                      DOCUMENT INGESTION                          │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -62,27 +94,47 @@ Multi-tenant RAG (Retrieval-Augmented Generation) infrastructure using AWS Bedro
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Query Agent                               │
+│                      QUERY INTERFACE                             │
 └─────────────────────────────────────────────────────────────────┘
                             │
-                ┌───────────┴───────────┐
-                │                       │
-                ▼                       ▼
-    ┌───────────────────┐   ┌──────────────────────┐
-    │ REST API          │   │ AWS SDK (Direct)     │
-    │ (API Gateway)     │   │ bedrock-agent        │
-    │ + API Key Auth    │   │ -runtime             │
-    └─────────┬─────────┘   └──────────┬───────────┘
-              │                        │
-              └────────────┬───────────┘
-                           ▼
+                ┌───────────┴────────────┐
+                │                        │
+                ▼                        ▼
+    ┌────────────────────┐   ┌────────────────────────┐
+    │ REST API           │   │ Direct AWS SDK         │
+    │ (API Gateway)      │   │ (bedrock-agent-runtime)│
+    │                    │   │                        │
+    │ POST /query        │   │ invoke_agent()         │
+    │ + API Key Auth     │   │ + AWS Credentials      │
+    │ + CORS             │   │                        │
+    │ + Rate Limiting    │   │                        │
+    └────────┬───────────┘   └────────┬───────────────┘
+             │                        │
+             │  ┌─────────────────────┘
+             │  │
+             ▼  ▼
+    ┌──────────────────────────────────┐
+    │  API Handler Lambda              │
+    │  (invoke bedrock agent)          │
+    └──────────────┬───────────────────┘
+                   │
+                   ▼
         ┌───────────────────────────────────────┐
         │ Bedrock Agent Core                    │
+        │                                       │
         │ - Model: Amazon Nova Pro              │
         │ - Guardrails: PII + Content Filters   │
         │ - Knowledge Base: Vector Search       │
+        │ - Session Management                  │
         └───────────────────────────────────────┘
 ```
+
+**Key Components:**
+- **8 CDK Stacks** deployed and operational
+- **REST API Endpoint** for backend integration (recommended)
+- **Direct SDK Access** for advanced use cases
+- **Automatic OCR** for images and scanned PDFs
+- **Bedrock Native Processing** for optimal performance
 
 ---
 
@@ -201,7 +253,7 @@ print(result['answer'])
 export API_KEY="your-api-key"
 
 # Run tests
-python3 test-api.py
+python3 scripts/test-api.py
 ```
 
 📖 **Full API Documentation:** [docs/API_USAGE.md](docs/API_USAGE.md)
@@ -294,6 +346,168 @@ ask_agent("Who is the CEO?")
 
 ---
 
+## 🔌 API Gateway Configuration
+
+### Endpoint Details
+
+| Property | Value |
+|----------|-------|
+| **Endpoint URL** | `https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query` |
+| **Method** | POST |
+| **Authentication** | API Key (x-api-key header) |
+| **API Key ID** | `6a0h023lec` |
+| **Region** | us-east-1 |
+| **Stage** | dev |
+
+### Rate Limits and Quotas
+
+| Limit Type | Value |
+|------------|-------|
+| **Rate Limit** | 100 requests/second |
+| **Burst Limit** | 200 concurrent requests |
+| **Monthly Quota** | 10,000 requests |
+| **Timeout** | 30 seconds |
+
+### Request Format
+
+**Headers:**
+```
+Content-Type: application/json
+x-api-key: <your-api-key>
+```
+
+**Body:**
+```json
+{
+  "question": "Your question here",
+  "sessionId": "optional-session-id-for-conversation-continuity"
+}
+```
+
+**Response (Success):**
+```json
+{
+  "answer": "Agent's response",
+  "sessionId": "abc-123-def-456",
+  "status": "success"
+}
+```
+
+**Response (Error):**
+```json
+{
+  "error": "Error message",
+  "status": "error"
+}
+```
+
+### CORS Support
+
+The API supports CORS for web applications:
+- **Allowed Origins:** `*` (all origins)
+- **Allowed Methods:** `GET, POST, OPTIONS`
+- **Allowed Headers:** `Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token`
+
+### Getting Your API Key
+
+**Option 1: AWS CLI (requires API Gateway permissions)**
+```bash
+aws apigateway get-api-key --api-key 6a0h023lec --include-value --query 'value' --output text
+```
+
+**Option 2: Ask Administrator**
+If you don't have API Gateway permissions, ask an administrator to retrieve the key for you.
+
+### Language Examples
+
+**Python:**
+```python
+import requests
+
+response = requests.post(
+    "https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query",
+    headers={"Content-Type": "application/json", "x-api-key": "YOUR_KEY"},
+    json={"question": "What documents do you have?"}
+)
+print(response.json()['answer'])
+```
+
+**JavaScript (Node.js):**
+```javascript
+const axios = require('axios');
+
+const response = await axios.post(
+  'https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query',
+  { question: 'What documents do you have?' },
+  { headers: { 'Content-Type': 'application/json', 'x-api-key': 'YOUR_KEY' } }
+);
+console.log(response.data.answer);
+```
+
+**TypeScript (fetch):**
+```typescript
+const response = await fetch(
+  'https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query',
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'YOUR_KEY'
+    },
+    body: JSON.stringify({ question: 'What documents do you have?' })
+  }
+);
+const data = await response.json();
+console.log(data.answer);
+```
+
+**curl:**
+```bash
+curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_KEY" \
+  -d '{"question": "What documents do you have?"}'
+```
+
+### Monitoring and Logs
+
+**API Gateway Logs:**
+```bash
+# View API Gateway logs
+aws logs tail /aws/apigateway/processapp-dev --follow
+```
+
+**Lambda Handler Logs:**
+```bash
+# View Lambda handler logs
+aws logs tail /aws/lambda/processapp-api-handler-dev --follow
+```
+
+### Test Script
+
+A comprehensive test script is provided at the root of the repository:
+
+```bash
+# Set your API key
+export API_KEY="your-api-key-here"
+
+# Run the test script
+python3 scripts/test-api.py
+```
+
+The test script includes:
+- ✅ Simple query
+- ✅ Follow-up question (session continuity)
+- ✅ OCR document query
+- ✅ Company data query
+- ✅ PII filter test (guardrails)
+
+📖 **API Documentation:**
+- **Quick Reference:** [docs/API_QUICKREF.md](docs/API_QUICKREF.md) - One-page cheat sheet with all essentials
+- **Complete Guide:** [docs/API_USAGE.md](docs/API_USAGE.md) - Full reference with advanced topics
+
+---
+
 ## 🏗️ Infrastructure
 
 ### Deployed Stacks
@@ -303,7 +517,8 @@ ask_agent("Who is the CEO?")
 4. **DocumentProcessingStack** - OCR Lambda, Textract, SNS
 5. **GuardrailsStack** - Content filters and PII protection
 6. **AgentStack** - Bedrock Agent with Nova Pro model
-7. **MonitoringStack** - CloudWatch dashboards and alarms
+7. **APIStack** - API Gateway REST endpoint with Lambda handler
+8. **MonitoringStack** - CloudWatch dashboards and alarms
 
 ### Key Configuration
 
@@ -360,10 +575,10 @@ Use the provided test scripts:
 
 ```bash
 # Test OCR flow
-python3 test-ocr-agent.py
+python3 scripts/test-ocr-agent.py
 
 # Test normal flow (text documents)
-python3 test-dos-flujos.py
+python3 scripts/test-dos-flujos.py
 ```
 
 ### Example Questions
@@ -422,19 +637,29 @@ kb-rag-agent/
 │   │   ├── DocumentProcessingStack.ts # OCR Lambda
 │   │   ├── GuardrailsStack.ts        # Content filters
 │   │   ├── AgentStack.ts             # Bedrock Agent
+│   │   ├── APIStack.ts               # API Gateway
 │   │   └── MonitoringStack.ts        # CloudWatch
 │   ├── lambdas/
 │   │   ├── ocr-processor/            # Textract integration
+│   │   ├── api-handler/              # API Gateway handler
 │   │   └── embedder/                 # ⚠️ NOT USED (Bedrock handles this)
 │   └── config/
 │       ├── environments.ts           # Environment config
 │       └── security.config.ts        # Security policies
 ├── docs/
+│   ├── INDEX.md                      # Documentation index
+│   ├── API_QUICKREF.md               # API quick reference
+│   ├── API_USAGE.md                  # Complete API guide
 │   ├── ARCHITECTURE_DIAGRAM.md       # System architecture
 │   ├── TESTING_GUIDE.md              # Testing procedures
-│   └── SYSTEM_OVERVIEW.md            # Detailed documentation
-├── test-ocr-agent.py                 # OCR flow test
-├── test-dos-flujos.py                # Dual flow test
+│   ├── SYSTEM_OVERVIEW.md            # Detailed documentation
+│   └── LAMBDA_INVENTORY.md           # Lambda status inventory
+├── scripts/
+│   ├── test-api.py                   # API endpoint test
+│   ├── test-agent.py                 # Direct agent test
+│   ├── test-ocr-agent.py             # OCR flow test
+│   ├── test-dos-flujos.py            # Dual flow test
+│   └── create-ocr-image.py           # Generate test images
 └── README.md                         # This file
 ```
 
@@ -506,9 +731,22 @@ Internal use only - ProcessApp infrastructure.
 
 ---
 
+## 📚 Complete Documentation
+
+**Full documentation index:** [docs/INDEX.md](docs/INDEX.md)
+
+### Quick Links
+- **[API Quick Reference](docs/API_QUICKREF.md)** - One-page API cheat sheet
+- **[API Complete Guide](docs/API_USAGE.md)** - REST API full documentation
+- **[System Overview](docs/SYSTEM_OVERVIEW.md)** - Detailed architecture
+- **[Testing Guide](docs/TESTING_GUIDE.md)** - End-to-end testing
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Infrastructure deployment
+- **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAM.md)** - Visual architecture
+
 ## 👥 Support
 
 For issues or questions:
 - Check CloudWatch logs first
-- Review `docs/TESTING_GUIDE.md` for detailed testing procedures
-- Review `docs/SYSTEM_OVERVIEW.md` for architecture details
+- Review [docs/INDEX.md](docs/INDEX.md) for complete documentation index
+- Review [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) for testing procedures
+- Review [docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md) for architecture details
