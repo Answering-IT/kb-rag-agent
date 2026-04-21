@@ -19,6 +19,7 @@ sqs = boto3.client('sqs')
 DOCS_BUCKET = os.environ['DOCS_BUCKET']
 CHUNKS_QUEUE_URL = os.environ['CHUNKS_QUEUE_URL']
 TEXTRACT_SNS_TOPIC_ARN = os.environ['TEXTRACT_SNS_TOPIC_ARN']
+KMS_KEY_ID = os.environ.get('KMS_KEY_ID', '')
 STAGE = os.environ['STAGE']
 
 
@@ -110,7 +111,7 @@ def handle_s3_upload(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 def handle_textract_completion(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Handle Textract job completion notification
-    Retrieve results and send chunks to SQS
+    Save full text to S3 and send chunks to SQS
     """
     try:
         # Parse SNS message
@@ -134,10 +135,13 @@ def handle_textract_completion(event: Dict[str, Any], context: Any) -> Dict[str,
         # Get document key from job metadata (if available)
         document_key = sns_message.get('DocumentLocation', {}).get('S3ObjectName', 'unknown')
 
-        # Chunk the text
-        chunks = chunk_text(text, document_key)
+        # STEP 1: Save full text to S3 for Bedrock KB to read
+        # Use atomic write with temp location to avoid partial reads during sync
+        processed_key = save_processed_text_to_s3(document_key, text)
+        print(f'Saved processed text to: {processed_key}')
 
-        # Send chunks to SQS
+        # STEP 2: Chunk the text and send to SQS (for Embedder Lambda if needed)
+        chunks = chunk_text(text, document_key)
         send_chunks_to_queue(chunks)
 
         print(f'Processed {len(chunks)} chunks from Textract job {job_id}')
@@ -147,7 +151,8 @@ def handle_textract_completion(event: Dict[str, Any], context: Any) -> Dict[str,
             'body': json.dumps({
                 'message': 'Textract results processed',
                 'jobId': job_id,
-                'chunks': len(chunks)
+                'chunks': len(chunks),
+                'processedKey': processed_key
             })
         }
 
@@ -203,6 +208,57 @@ def get_textract_results(job_id: str) -> str:
             break
 
     return '\n'.join(all_text)
+
+
+def save_processed_text_to_s3(original_key: str, text: str) -> str:
+    """
+    Save processed text to S3 for Bedrock KB to read
+
+    Writes OCR-extracted text directly to documents/processed/ prefix
+    where Bedrock KB can discover and index it.
+
+    Args:
+        original_key: Original S3 key (e.g., "documents/test.png")
+        text: Extracted text to save
+
+    Returns:
+        S3 key where text was saved
+    """
+    # Extract filename without extension
+    filename = original_key.split('/')[-1]
+    base_name = '.'.join(filename.split('.')[:-1])  # Remove extension
+
+    # Write directly to processed location
+    # Note: Using documents/processed/ subdirectory to keep organized
+    processed_key = f'documents/processed-{base_name}.txt'
+
+    try:
+        # Prepare put_object parameters
+        put_params = {
+            'Bucket': DOCS_BUCKET,
+            'Key': processed_key,
+            'Body': text.encode('utf-8'),
+            'ContentType': 'text/plain',
+            'Metadata': {
+                'source': original_key,
+                'processor': 'textract-ocr',
+                'timestamp': datetime.utcnow().isoformat(),
+                'stage': STAGE
+            }
+        }
+
+        # Add KMS encryption if key is available (required by bucket policy)
+        if KMS_KEY_ID:
+            put_params['ServerSideEncryption'] = 'aws:kms'
+            put_params['SSEKMSKeyId'] = KMS_KEY_ID
+
+        s3.put_object(**put_params)
+        print(f'Saved processed text to: {processed_key}')
+        return processed_key
+
+    except Exception as e:
+        print(f'Error saving processed text to S3: {str(e)}')
+        raise
 
 
 def extract_text_from_s3(bucket_name: str, object_key: str) -> str:

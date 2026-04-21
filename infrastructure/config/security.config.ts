@@ -271,11 +271,15 @@ export function getLambdaOCRProcessorPolicy(
 ): iam.PolicyDocument {
   return new iam.PolicyDocument({
     statements: [
-      // S3 read access
+      // S3 read/write access
       new iam.PolicyStatement({
-        sid: 'ReadDocumentsBucket',
+        sid: 'AccessDocumentsBucket',
         effect: iam.Effect.ALLOW,
-        actions: ['s3:GetObject', 's3:GetObjectVersion'],
+        actions: [
+          's3:GetObject',
+          's3:GetObjectVersion',
+          's3:PutObject',  // Allow writing processed text back to S3
+        ],
         resources: [`${docsBucketArn}/*`],
       }),
 
@@ -300,11 +304,16 @@ export function getLambdaOCRProcessorPolicy(
         resources: [sqsQueueArn],
       }),
 
-      // KMS decrypt (for S3 objects)
+      // KMS encrypt/decrypt (for S3 objects)
       new iam.PolicyStatement({
-        sid: 'DecryptWithKMS',
+        sid: 'EncryptDecryptWithKMS',
         effect: iam.Effect.ALLOW,
-        actions: ['kms:Decrypt', 'kms:DescribeKey'],
+        actions: [
+          'kms:Decrypt',
+          'kms:Encrypt',
+          'kms:GenerateDataKey',  // Required for PutObject with KMS
+          'kms:DescribeKey',
+        ],
         resources: [kmsKeyArn],
       }),
 
@@ -522,7 +531,7 @@ export function getGuardrailConfig(): GuardrailConfig {
         {
           type: 'PROMPT_ATTACK',
           inputStrength: GuardrailsConfig.contentFilters.promptAttack,
-          outputStrength: GuardrailsConfig.contentFilters.promptAttack,
+          outputStrength: 'NONE', // Bedrock requirement: PROMPT_ATTACK output must be NONE
         },
       ],
     },
@@ -581,7 +590,7 @@ export function getS3VPCEndpointPolicy(): iam.PolicyDocument {
 export function getCustomResourcePolicy(region: string): iam.PolicyDocument {
   return new iam.PolicyDocument({
     statements: [
-      // Bedrock Knowledge Base operations
+      // Bedrock Knowledge Base and Guardrail operations
       new iam.PolicyStatement({
         sid: 'ManageBedrockKnowledgeBase',
         effect: iam.Effect.ALLOW,
@@ -598,6 +607,9 @@ export function getCustomResourcePolicy(region: string): iam.PolicyDocument {
           'bedrock:GetGuardrail',
           'bedrock:UpdateGuardrail',
           'bedrock:DeleteGuardrail',
+          'bedrock:CreateGuardrailVersion',  // Added: Required for versioning
+          'bedrock:GetGuardrailVersion',
+          'bedrock:DeleteGuardrailVersion',
         ],
         resources: ['*'],
       }),

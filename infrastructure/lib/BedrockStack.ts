@@ -141,6 +141,9 @@ export class BedrockStack extends cdk.Stack {
         type: 'S3',
         s3Configuration: {
           bucketArn: props.docsBucket.bucketArn,
+          // Include both original documents and OCR-processed text
+          // Bedrock reads all files under documents/ including subfolders
+          // (documents/processed/ is automatically included)
           inclusionPrefixes: ['documents/'],
         },
       },

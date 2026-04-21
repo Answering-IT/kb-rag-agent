@@ -1,0 +1,37 @@
+INFORME EJECUTIVO Q1 2026
+Empresa: TechFlow Solutions
+Documento ID: REP-2026-Q1
+
+RESUMEN FINANCIERO:
+- Ingresos Q1: $4.2 millones
+- Crecimiento: 38% vs Q4 2025
+- Ganancia neta: $1.9 millones
+- Proyección Q2: $5.1 millones
+
+PRODUCTOS:
+Principal: CloudFlow Enterprise
+Versión actual: 8.5.3
+Precio: $599/mes por licencia
+Clientes activos: 842 empresas
+
+EQUIPO:
+CEO: Patricia Williams
+CTO: James Rodriguez
+CFO: Lisa Chen
+Total empleados: 95
+Nuevas contrataciones Q1: 12
+
+TOP CLIENTES:
+1. GlobalBank Inc - $280K/año
+2. RetailChain Corp - $195K/año
+3. MediaStream Ltd - $145K/año
+
+PROYECTOS ACTIVOS:
+Proyecto Horizon: 45% completo, presupuesto $750K
+Proyecto Nova: 25% completo, presupuesto $500K
+
+OBJETIVOS 2026:
+- Alcanzar $20M en ingresos anuales
+- Expandir a 8 países nuevos
+- Lanzar 3 productos adicionales
+- Crecer equipo a 150 personas

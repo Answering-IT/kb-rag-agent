@@ -19,6 +19,7 @@ import { BedrockStack } from '../lib/BedrockStack';
 import { DocumentProcessingStack } from '../lib/DocumentProcessingStack';
 import { GuardrailsStack } from '../lib/GuardrailsStack';
 import { MonitoringStack } from '../lib/MonitoringStack';
+import { AgentStack } from '../lib/AgentStack';
 
 /**
  * Main App
@@ -104,6 +105,21 @@ SDLCAccounts.forEach((account) => {
         }
       );
 
+      const agentStack = new AgentStack(
+        app,
+        `${account.stage}-${region}-agent`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          guardrailId: guardrailsStack.guardrailId,
+          guardrailVersion: guardrailsStack.guardrailVersion,
+          env,
+        }
+      );
+      agentStack.addDependency(bedrockStack);
+      agentStack.addDependency(guardrailsStack);
+
       const monitoringStack = new MonitoringStack(
         app,
         `${account.stage}-${region}-monitoring`,
@@ -127,6 +143,7 @@ SDLCAccounts.forEach((account) => {
         cdk.Tags.of(bedrockStack).add(key, value);
         cdk.Tags.of(docProcessingStack).add(key, value);
         cdk.Tags.of(guardrailsStack).add(key, value);
+        cdk.Tags.of(agentStack).add(key, value);
         cdk.Tags.of(monitoringStack).add(key, value);
       });
     } else {

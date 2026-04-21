@@ -98,6 +98,19 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================
+    // TEXTRACT IAM ROLE
+    // ========================================
+
+    // IAM role for Textract to publish job completion notifications to SNS
+    const textractRole = new iam.Role(this, 'TextractRole', {
+      assumedBy: new iam.ServicePrincipal('textract.amazonaws.com'),
+      description: 'Role for Textract to publish job completion notifications to SNS',
+    });
+
+    // Grant Textract role permission to publish to SNS topic
+    textractTopic.grantPublish(textractRole);
+
+    // ========================================
     // OCR PROCESSOR LAMBDA
     // ========================================
 
@@ -143,6 +156,8 @@ export class DocumentProcessingStack extends cdk.Stack {
         DOCS_BUCKET: props.docsBucket.bucketName,
         CHUNKS_QUEUE_URL: this.chunksQueue.queueUrl,
         TEXTRACT_SNS_TOPIC_ARN: textractTopic.topicArn,
+        TEXTRACT_ROLE_ARN: textractRole.roleArn,
+        KMS_KEY_ID: props.kmsKey.keyId,
         STAGE: props.stage,
       },
       description: 'Process documents with Textract and queue chunks',

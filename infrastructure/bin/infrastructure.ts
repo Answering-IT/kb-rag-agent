@@ -1,4 +1,13 @@
 #!/usr/bin/env node
+/**
+ * @deprecated This file is no longer used. Use bin/app.ts instead.
+ *
+ * This was the original single-stack approach, but has been replaced by
+ * a multi-stack architecture in bin/app.ts which provides better separation
+ * of concerns and more flexible deployment options.
+ *
+ * See bin/app.ts for the current entry point.
+ */
 import * as cdk from 'aws-cdk-lib/core';
 import { InfrastructureStack } from '../lib/infrastructure-stack';
 

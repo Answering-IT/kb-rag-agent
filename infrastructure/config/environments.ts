@@ -42,8 +42,8 @@ export const BedrockConfig = {
   embeddingModel: 'amazon.titan-embed-text-v2:0',
   embeddingDimensions: 1536,
 
-  // LLM model for RAG queries
-  llmModel: 'anthropic.claude-sonnet-3-5-v2:0',
+  // LLM model for RAG queries (using available Claude Sonnet 4.5)
+  llmModel: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
 
   // Storage optimization (reduces costs by ~50%)
   storageOptimization: true,
@@ -152,15 +152,17 @@ export const GuardrailsConfig = {
   description: 'Filter PII and sensitive information',
 
   // PII entities to detect and block
+  // Using valid Bedrock Guardrail PII entity types
   piiEntities: [
     'EMAIL',
     'PHONE',
-    'SSN',
-    'CREDIT_CARD',
-    'PERSON',
-    'ORGANIZATION',
+    'US_SOCIAL_SECURITY_NUMBER', // Was: SSN
+    'CREDIT_DEBIT_CARD_NUMBER',  // Was: CREDIT_CARD
+    'NAME',                       // Was: PERSON
     'ADDRESS',
-    'DATE_OF_BIRTH',
+    'US_PASSPORT_NUMBER',
+    'US_BANK_ACCOUNT_NUMBER',
+    'AGE',
   ],
 
   // Regex patterns
@@ -178,13 +180,14 @@ export const GuardrailsConfig = {
   ],
 
   // Content filters
+  // Note: promptAttack can only filter INPUT, not OUTPUT (Bedrock requirement)
   contentFilters: {
     sexual: 'HIGH',
     violence: 'HIGH',
     hate: 'HIGH',
     insults: 'MEDIUM',
     misconduct: 'MEDIUM',
-    promptAttack: 'HIGH',
+    promptAttack: 'HIGH', // Only applies to input; output is automatically NONE
   },
 
   // Topics to block
@@ -193,6 +196,68 @@ export const GuardrailsConfig = {
     'Medical diagnosis',
     'Legal advice',
   ],
+};
+
+/**
+ * Bedrock Agent Configuration
+ */
+export const AgentConfig = {
+  name: 'processapp-agent',
+  description: 'ProcessApp RAG Agent - answers questions using document knowledge base',
+
+  // System instructions for the agent
+  instructions: `You are ProcessApp, a helpful AI assistant with access to a comprehensive document knowledge base.
+
+Your capabilities:
+- Search and retrieve information from uploaded documents
+- Answer questions based on document content
+- Provide accurate citations and sources
+- Handle technical documentation and business content
+
+Guidelines for responses:
+1. Always search the knowledge base before answering
+2. Provide accurate answers with source citations when available
+3. If information is not found in the documents, clearly state that
+4. Never make up information or hallucinate facts
+5. Be concise and professional in your responses
+6. When relevant, provide specific document references
+7. If a question is ambiguous, ask for clarification
+
+Content Safety:
+- PII and sensitive information is automatically filtered
+- You have guardrails for content safety and appropriateness
+- If you detect harmful or inappropriate requests, politely decline
+
+Remember: Your knowledge comes from the documents in the knowledge base. Always ground your responses in the actual content available.`,
+
+  // Foundation model (using Amazon Nova Pro - confirmed active)
+  foundationModel: 'amazon.nova-pro-v1:0',
+
+  // Session configuration
+  idleSessionTTL: 900, // 15 minutes
+
+  // Model parameters
+  inference: {
+    maxTokens: 4096,
+    temperature: 0.7,
+    topP: 0.9,
+    stopSequences: [],
+  },
+
+  // Action groups configuration
+  actionGroups: [
+    {
+      name: 'QueryKnowledgeBase',
+      description: 'Search and retrieve information from the ProcessApp Knowledge Base',
+      enabled: true,
+    },
+  ],
+
+  // Prompt override configuration (optional)
+  promptOverride: {
+    enabled: false,
+    // Custom prompt template if needed
+  },
 };
 
 /**

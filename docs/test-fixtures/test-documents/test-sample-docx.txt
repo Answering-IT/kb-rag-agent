@@ -1,0 +1,109 @@
+ProcessApp RAG System Test Document - DOCX Format
+
+Document ID: DOCX-001
+Test Type: Word Document Processing (simulated as TXT for testing)
+Created: 2026-04-17
+Note: In actual testing, this would be a .docx file. For now, using .txt extension.
+
+OVERVIEW
+========
+
+This document simulates a Microsoft Word document (.docx) for testing the RAG pipeline. DOCX files should be processed without OCR since they contain native text.
+
+MULTI-TENANT ARCHITECTURE
+==========================
+
+Stage Isolation:
+- Development (dev): Account 708819485463, us-east-1
+- Staging (staging): Separate resources
+- Production (prod): Separate resources with retention policies
+
+Resource Naming Convention:
+- Pattern: processapp-{resource}-{stage}-{accountId}
+- Example: processapp-docs-v2-dev-708819485463
+- Example: processapp-vectors-v2-dev-708819485463
+
+Tenant Separation:
+- S3 bucket prefixes per tenant
+- IAM role isolation
+- KMS key per stage
+- CloudWatch log groups per stage
+
+COST OPTIMIZATION STRATEGIES
+=============================
+
+1. S3 Intelligent Tiering
+   - Archive after 90 days
+   - Deep archive after 180 days
+   - Applied to vectors bucket
+
+2. Lambda Optimizations
+   - Reserved concurrency limits
+   - Timeout configuration
+   - Memory optimization
+   - X-Ray tracing for debugging
+
+3. Lifecycle Policies
+   - Document archival to Glacier (90 days)
+   - Document deletion (365 days)
+   - Cleanup incomplete uploads (7 days)
+
+4. S3 Vectors vs OpenSearch
+   - Cost: 90% reduction
+   - Complexity: Significantly simpler
+   - Maintenance: AWS-managed
+   - Scalability: Automatic
+
+SECURITY FEATURES
+=================
+
+Encryption:
+- KMS encryption for all S3 buckets
+- KMS key rotation enabled
+- Encrypted SQS queues
+- Encrypted SNS topics
+
+IAM:
+- Least privilege access
+- Service-specific roles
+- Cross-stack role references
+- Policy validation
+
+Network:
+- Block all public S3 access
+- VPC endpoints (future enhancement)
+- PrivateLink for Bedrock (future)
+
+Content Safety:
+- Bedrock Guardrails
+- PII detection (SSN, credit cards, email, phone)
+- Content filtering (hate speech, violence, sexual, insults)
+- Custom word filters
+
+VALIDATION QUERIES FOR DOCX TEST
+=================================
+
+Query 1: "What is the development account ID?"
+Expected Answer: 708819485463
+
+Query 2: "How does ProcessApp achieve multi-tenancy?"
+Expected Answer: Stage-based isolation with separate S3 buckets, IAM roles, and KMS keys per stage
+
+Query 3: "What are the lifecycle policies for documents?"
+Expected Answer: Archive to Glacier after 90 days, delete after 365 days
+
+Query 4: "What PII types does the guardrail detect?"
+Expected Answer: SSN, credit cards, email addresses, phone numbers
+
+Query 5: "Why use S3 Vectors instead of OpenSearch?"
+Expected Answer: 90% cost reduction, simpler architecture, AWS-managed, automatic scalability
+
+UNIQUE IDENTIFIERS
+==================
+
+- Test Document Code: RAGTEST-DOCX-2026-04-17
+- Document Category: Architecture Documentation
+- Processing Status: Should skip OCR (text-native DOCX)
+- Expected Pipeline: Direct to KB Sync → Bedrock Processing
+
+END OF TEST DOCUMENT

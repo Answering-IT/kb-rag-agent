@@ -1,0 +1,90 @@
+INFORME TRIMESTRAL - EMPRESA TECH SOLUTIONS
+Fecha: Enero 2026
+Confidencial
+
+=== RESUMEN EJECUTIVO ===
+
+Tech Solutions reporta un crecimiento del 45% en ventas durante el último trimestre.
+Las operaciones se expandieron a 3 nuevos países: España, México y Colombia.
+
+=== PRODUCTOS Y SERVICIOS ===
+
+Producto Principal: CloudSync Pro
+- Versión actual: 3.5.2
+- Lanzamiento: 15 de Diciembre 2025
+- Precio: $299/mes por usuario
+- Características principales:
+  * Sincronización en tiempo real
+  * Cifrado de extremo a extremo
+  * Integración con AWS, Azure y GCP
+  * Soporte para equipos de hasta 500 usuarios
+
+Servicio de Consultoría: DevOps Expert
+- Tarifa: $200/hora
+- Equipo: 12 consultores certificados
+- Especialidades: Kubernetes, Terraform, CI/CD
+
+=== FINANZAS ===
+
+Ingresos Q4 2025: $2.8 millones
+Costos operacionales: $1.2 millones
+Ganancia neta: $1.6 millones
+Proyección Q1 2026: $3.5 millones
+
+Inversión en I+D: $400,000
+Gastos de marketing: $350,000
+
+=== EQUIPO ===
+
+CEO: María González
+CTO: Carlos Rodríguez
+CFO: Ana Martínez
+VP de Ventas: Roberto Sánchez
+
+Total empleados: 78
+Contrataciones planificadas Q1: 15
+
+=== CLIENTES PRINCIPALES ===
+
+1. Banco Nacional - Contrato anual: $850,000
+2. RetailCorp - Contrato anual: $620,000
+3. TelecomGlobal - Contrato anual: $480,000
+4. HealthGroup - Contrato anual: $390,000
+5. EduTech - Contrato anual: $290,000
+
+=== PROYECTOS EN DESARROLLO ===
+
+Proyecto Alpha (Q2 2026):
+- IA para análisis predictivo
+- Presupuesto: $600,000
+- Equipo: 8 ingenieros
+- Estado: 35% completo
+
+Proyecto Beta (Q3 2026):
+- Plataforma móvil nativa
+- Presupuesto: $450,000
+- Equipo: 6 desarrolladores
+- Estado: 20% completo
+
+=== OBJETIVOS 2026 ===
+
+1. Alcanzar $15 millones en ingresos anuales
+2. Expandirse a 5 países adicionales
+3. Lanzar 2 nuevos productos
+4. Aumentar el equipo a 120 empleados
+5. Obtener certificación ISO 27001
+
+=== RIESGOS Y DESAFÍOS ===
+
+- Competencia creciente en el sector cloud
+- Escasez de talento técnico especializado
+- Fluctuaciones en tasas de cambio (operaciones internacionales)
+- Dependencia de clientes grandes (top 3 = 60% de ingresos)
+
+=== CONCLUSIÓN ===
+
+Tech Solutions está bien posicionada para un crecimiento sostenido.
+La estrategia de expansión internacional y el enfoque en innovación
+tecnológica son pilares clave para alcanzar los objetivos de 2026.
+
+Próxima revisión: Abril 2026

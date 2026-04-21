@@ -77,9 +77,26 @@ export class SecurityStack extends cdk.Stack {
       props.docsBucket.addToResourcePolicy(statement);
     });
 
-    // Grant KMS key access to docs bucket
+    // Allow specific IAM user to upload documents (for testing)
+    props.docsBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowUserUpload',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ArnPrincipal(`arn:aws:iam::${props.accountId}:user/qohat.prettel`)],
+        actions: ['s3:PutObject', 's3:GetObject', 's3:ListBucket'],
+        resources: [
+          props.docsBucket.bucketArn,
+          `${props.docsBucket.bucketArn}/*`,
+        ],
+      })
+    );
+
+    // Grant KMS key access to docs bucket and specific user
     props.kmsKey.grantEncryptDecrypt(
       new iam.ServicePrincipal('s3.amazonaws.com')
+    );
+    props.kmsKey.grantEncryptDecrypt(
+      new iam.ArnPrincipal(`arn:aws:iam::${props.accountId}:user/qohat.prettel`)
     );
 
     // Vectors bucket policy

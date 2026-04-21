@@ -1,0 +1,148 @@
+{
+  "test_suite": {
+    "name": "ProcessApp RAG Pipeline Validation",
+    "version": "1.0",
+    "created": "2026-04-17",
+    "purpose": "Validate RAG pipeline and detect duplication"
+  },
+  "documents": [
+    {
+      "id": "TXT-001",
+      "filename": "test-sample.txt",
+      "type": "text/plain",
+      "description": "Plain text document for testing native text processing",
+      "requires_ocr": false,
+      "expected_pipeline": "Direct to KB Sync → Bedrock Chunking → Embedding → Vector Index",
+      "size_bytes": 2845,
+      "validation_queries": [
+        {
+          "query": "What embedding model does ProcessApp use?",
+          "expected_answer": "Amazon Titan v2 with 1024 dimensions"
+        },
+        {
+          "query": "What is the cost advantage of S3 Vectors?",
+          "expected_answer": "90% cheaper than OpenSearch"
+        },
+        {
+          "query": "How often does the Knowledge Base sync?",
+          "expected_answer": "Every 6 hours or manual trigger"
+        }
+      ],
+      "unique_identifier": "RAGTEST-TXT-2026-04-17",
+      "category": "Technical Documentation"
+    },
+    {
+      "id": "DOCX-001",
+      "filename": "test-sample-docx.txt",
+      "type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "description": "Word document (simulated as TXT) for testing DOCX processing",
+      "requires_ocr": false,
+      "expected_pipeline": "Direct to KB Sync → Bedrock Processing",
+      "size_bytes": 3421,
+      "note": "In actual testing, use real .docx file",
+      "validation_queries": [
+        {
+          "query": "What is the development account ID?",
+          "expected_answer": "708819485463"
+        },
+        {
+          "query": "How does ProcessApp achieve multi-tenancy?",
+          "expected_answer": "Stage-based isolation with separate S3 buckets, IAM roles, and KMS keys per stage"
+        },
+        {
+          "query": "What PII types does the guardrail detect?",
+          "expected_answer": "SSN, credit cards, email addresses, phone numbers"
+        }
+      ],
+      "unique_identifier": "RAGTEST-DOCX-2026-04-17",
+      "category": "Architecture Documentation"
+    },
+    {
+      "id": "PDF-001",
+      "filename": "test-sample-pdf.txt",
+      "type": "application/pdf",
+      "description": "PDF document (text simulation) for testing OCR pipeline",
+      "requires_ocr": true,
+      "expected_pipeline": "OCR Lambda → Textract → Text Extraction → KB Sync → Bedrock Processing",
+      "size_bytes": 4123,
+      "note": "For real testing, use actual PDF with scanned images",
+      "textract_features": ["TABLES", "FORMS", "LAYOUT"],
+      "validation_queries": [
+        {
+          "query": "What OCR service does ProcessApp use?",
+          "expected_answer": "AWS Textract with TABLES and FORMS features"
+        },
+        {
+          "query": "What is the Textract workflow?",
+          "expected_answer": "S3 Upload → EventBridge → OCR Lambda → Textract Async Job → SNS Notification → Text Extraction"
+        },
+        {
+          "query": "Is Textract processing synchronous or asynchronous?",
+          "expected_answer": "Asynchronous (async processing via SNS notifications)"
+        }
+      ],
+      "unique_identifier": "RAGTEST-PDF-2026-04-17",
+      "category": "OCR Test Document"
+    }
+  ],
+  "test_configurations": {
+    "aws_region": "us-east-1",
+    "stage": "dev",
+    "account_id": "708819485463",
+    "docs_bucket": "processapp-docs-v2-dev-708819485463",
+    "vectors_bucket_regular": "processapp-vectors-v2-dev-708819485463",
+    "vector_bucket_s3vectors": "processapp-vectors-dev-708819485463",
+    "upload_prefix": "documents/",
+    "processed_prefix": "documents/processed/"
+  },
+  "expected_outcomes": {
+    "test_a_current_pipeline": {
+      "description": "Test with current architecture (includes Embedder Lambda)",
+      "steps": [
+        "Upload document to S3 docs bucket",
+        "Monitor OCR Lambda logs",
+        "Verify chunks in SQS queue",
+        "Verify embeddings in vectorsBucket (regular S3)",
+        "Check KB ingestion jobs",
+        "Query agent or KB retrieve API"
+      ],
+      "critical_validations": [
+        "Are embeddings written to regular vectorsBucket?",
+        "Does Bedrock KB read from regular vectorsBucket?",
+        "Are embeddings generated twice (Lambda + Bedrock)?"
+      ]
+    },
+    "test_b_bedrock_native": {
+      "description": "Test Bedrock native pipeline (skip Embedder Lambda)",
+      "steps": [
+        "Upload document to S3 docs bucket",
+        "Manually trigger KB sync",
+        "Monitor ingestion job status",
+        "Verify vectors in VectorBucket (AWS::S3Vectors)",
+        "Test query via KB retrieve API"
+      ],
+      "critical_validations": [
+        "Does KB generate embeddings automatically?",
+        "Does KB write to VectorBucket (AWS::S3Vectors)?",
+        "Do queries return correct results?"
+      ]
+    }
+  },
+  "success_criteria": {
+    "test_a": [
+      "OCR Lambda processes document",
+      "Chunks appear in SQS",
+      "Embedder Lambda invoked",
+      "Embeddings in regular vectorsBucket",
+      "KB ingestion job completes",
+      "Queries return results"
+    ],
+    "test_b": [
+      "KB ingestion job completes successfully",
+      "Vectors created in VectorBucket (AWS::S3Vectors)",
+      "Queries return correct results",
+      "No need for Embedder Lambda"
+    ],
+    "decision": "If Test B succeeds → Proceed with Phase 2.5 simplification"
+  }
+}

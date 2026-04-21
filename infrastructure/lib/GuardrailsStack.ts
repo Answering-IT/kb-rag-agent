@@ -25,6 +25,7 @@ export interface GuardrailsStackProps extends cdk.StackProps {
 export class GuardrailsStack extends cdk.Stack {
   public readonly guardrailId: string;
   public readonly guardrailArn: string;
+  public readonly guardrailVersion: string;
 
   constructor(scope: Construct, id: string, props: GuardrailsStackProps) {
     super(scope, id, props);
@@ -178,7 +179,7 @@ def handler(event, context):
 
     guardrailVersion.node.addDependency(guardrail);
 
-    const version = guardrailVersion.getAttString('Version');
+    this.guardrailVersion = guardrailVersion.getAttString('Version');
 
     // ========================================
     // OUTPUTS
@@ -197,13 +198,13 @@ def handler(event, context):
     });
 
     new cdk.CfnOutput(this, 'GuardrailVersionOutput', {
-      value: version,
+      value: this.guardrailVersion,
       description: 'Bedrock Guardrail version',
       exportName: `processapp-guardrail-version-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'GuardrailIdentifierOutput', {
-      value: `${this.guardrailId}:${version}`,
+      value: `${this.guardrailId}:${this.guardrailVersion}`,
       description: 'Bedrock Guardrail identifier with version',
       exportName: `processapp-guardrail-identifier-${props.stage}-${region}`,
     });
