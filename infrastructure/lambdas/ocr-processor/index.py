@@ -1,24 +1,23 @@
 """
 OCR Processor Lambda
-Processes uploaded documents with Textract and sends chunks to SQS
+Processes uploaded documents with Textract and saves extracted text to S3
+Bedrock Knowledge Base handles chunking and embedding automatically
 """
 
 import json
 import os
 import boto3
-import uuid
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 # AWS clients
 s3 = boto3.client('s3')
 textract = boto3.client('textract')
-sqs = boto3.client('sqs')
 
 # Environment variables
 DOCS_BUCKET = os.environ['DOCS_BUCKET']
-CHUNKS_QUEUE_URL = os.environ['CHUNKS_QUEUE_URL']
 TEXTRACT_SNS_TOPIC_ARN = os.environ['TEXTRACT_SNS_TOPIC_ARN']
+TEXTRACT_ROLE_ARN = os.environ.get('TEXTRACT_ROLE_ARN', '')
 KMS_KEY_ID = os.environ.get('KMS_KEY_ID', '')
 STAGE = os.environ['STAGE']
 
@@ -66,7 +65,7 @@ def handle_s3_upload(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         file_ext = object_key.lower().split('.')[-1]
 
         if file_ext in ['pdf', 'png', 'jpg', 'jpeg', 'tiff']:
-            # Start Textract job for image/PDF
+            # Start Textract job for image/PDF documents that need OCR
             job_id = start_textract_job(bucket_name, object_key)
             print(f'Started Textract job: {job_id}')
 
@@ -79,19 +78,14 @@ def handle_s3_upload(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
 
-        elif file_ext in ['txt', 'docx']:
-            # Process text files directly
-            text = extract_text_from_s3(bucket_name, object_key)
-            chunks = chunk_text(text, object_key)
-            send_chunks_to_queue(chunks)
-
-            print(f'Processed {len(chunks)} chunks from text file')
+        elif file_ext in ['txt', 'docx', 'md']:
+            # Text files don't need OCR processing - Bedrock KB can read them directly
+            print(f'Text file detected, no OCR needed: {object_key}')
 
             return {
                 'statusCode': 200,
                 'body': json.dumps({
-                    'message': 'Text file processed',
-                    'chunks': len(chunks),
+                    'message': 'Text file - no OCR needed',
                     'document': f's3://{bucket_name}/{object_key}'
                 })
             }
@@ -135,23 +129,16 @@ def handle_textract_completion(event: Dict[str, Any], context: Any) -> Dict[str,
         # Get document key from job metadata (if available)
         document_key = sns_message.get('DocumentLocation', {}).get('S3ObjectName', 'unknown')
 
-        # STEP 1: Save full text to S3 for Bedrock KB to read
-        # Use atomic write with temp location to avoid partial reads during sync
+        # Save full text to S3 for Bedrock KB to read
+        # Bedrock will handle chunking and embedding automatically during ingestion
         processed_key = save_processed_text_to_s3(document_key, text)
         print(f'Saved processed text to: {processed_key}')
-
-        # STEP 2: Chunk the text and send to SQS (for Embedder Lambda if needed)
-        chunks = chunk_text(text, document_key)
-        send_chunks_to_queue(chunks)
-
-        print(f'Processed {len(chunks)} chunks from Textract job {job_id}')
 
         return {
             'statusCode': 200,
             'body': json.dumps({
-                'message': 'Textract results processed',
+                'message': 'Textract results processed and saved to S3',
                 'jobId': job_id,
-                'chunks': len(chunks),
                 'processedKey': processed_key
             })
         }
@@ -261,85 +248,5 @@ def save_processed_text_to_s3(original_key: str, text: str) -> str:
         raise
 
 
-def extract_text_from_s3(bucket_name: str, object_key: str) -> str:
-    """
-    Extract text from S3 object (for .txt files)
-    """
-    response = s3.get_object(Bucket=bucket_name, Key=object_key)
-    text = response['Body'].read().decode('utf-8')
-    return text
-
-
-def chunk_text(text: str, document_key: str, chunk_size: int = 512) -> List[Dict[str, Any]]:
-    """
-    Split text into chunks
-
-    Args:
-        text: Full document text
-        document_key: S3 key of source document
-        chunk_size: Target token count per chunk (approximate)
-
-    Returns:
-        List of chunk dictionaries
-    """
-    # Simple word-based chunking (rough approximation of tokens)
-    words = text.split()
-    chunks = []
-
-    # Approximate: 1 token ≈ 0.75 words
-    words_per_chunk = int(chunk_size * 0.75)
-    overlap_words = int(words_per_chunk * 0.2)  # 20% overlap
-
-    i = 0
-    chunk_index = 0
-
-    while i < len(words):
-        # Extract chunk
-        chunk_words = words[i:i + words_per_chunk]
-        chunk_text = ' '.join(chunk_words)
-
-        # Create chunk metadata
-        chunk = {
-            'id': str(uuid.uuid4()),
-            'text': chunk_text,
-            'metadata': {
-                'source': document_key,
-                'chunk_index': chunk_index,
-                'total_words': len(chunk_words),
-                'timestamp': datetime.utcnow().isoformat(),
-                'stage': STAGE
-            }
-        }
-
-        chunks.append(chunk)
-
-        # Move to next chunk with overlap
-        i += words_per_chunk - overlap_words
-        chunk_index += 1
-
-    return chunks
-
-
-def send_chunks_to_queue(chunks: List[Dict[str, Any]]) -> None:
-    """
-    Send chunks to SQS queue for embedding generation
-    """
-    for chunk in chunks:
-        try:
-            sqs.send_message(
-                QueueUrl=CHUNKS_QUEUE_URL,
-                MessageBody=json.dumps(chunk),
-                MessageAttributes={
-                    'ChunkId': {
-                        'StringValue': chunk['id'],
-                        'DataType': 'String'
-                    },
-                    'Source': {
-                        'StringValue': chunk['metadata']['source'],
-                        'DataType': 'String'
-                    }
-                }
-            )
-        except Exception as e:
-            print(f'Error sending chunk {chunk["id"]} to SQS: {str(e)}')
-            raise
+# NOTE: Chunking and embedding are now handled entirely by Bedrock Knowledge Base
+# The OCR processor only needs to extract text and save it to S3

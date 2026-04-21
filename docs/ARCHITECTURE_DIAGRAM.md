@@ -2,8 +2,8 @@
 
 Comprehensive architecture documentation for the ProcessApp RAG (Retrieval-Augmented Generation) system.
 
-**Last Updated**: 2026-04-17
-**Version**: 1.0 (Current Architecture with Embedder Lambda)
+**Last Updated**: 2026-04-21
+**Version**: 2.0 (Simplified Architecture - Bedrock Native Processing)
 
 ---
 
@@ -13,11 +13,10 @@ Comprehensive architecture documentation for the ProcessApp RAG (Retrieval-Augme
 2. [Main Architecture Diagram](#main-architecture-diagram)
 3. [Document Ingestion Pipeline](#document-ingestion-pipeline)
 4. [Query Flow Diagram](#query-flow-diagram)
-5. [Monitoring and Observability](#monitoring-and-observability)
+5. [OCR Processing Flow](#ocr-processing-flow)
 6. [Security Architecture](#security-architecture)
-7. [Multi-Tenant Isolation](#multi-tenant-isolation)
-8. [Cost Optimization Architecture](#cost-optimization-architecture)
-9. [Component Details](#component-details)
+7. [Component Details](#component-details)
+8. [Legacy Components](#legacy-components)
 
 ---
 
@@ -26,149 +25,138 @@ Comprehensive architecture documentation for the ProcessApp RAG (Retrieval-Augme
 ProcessApp RAG is a serverless, multi-tenant RAG system built on AWS Bedrock, featuring:
 
 - **7 CloudFormation Stacks**: PrereqsStack, SecurityStack, BedrockStack, DocumentProcessingStack, GuardrailsStack, AgentStack, MonitoringStack
-- **Foundation Model**: Claude 3.5 Sonnet for query responses
-- **Embedding Model**: Amazon Titan v2 (1024 dimensions)
+- **Foundation Model**: Amazon Nova Pro for query responses
+- **Embedding Model**: Amazon Titan Embed Text v2 (1024 dimensions)
 - **Vector Storage**: S3 Vectors (90% cheaper than OpenSearch)
 - **Content Safety**: Bedrock Guardrails with PII filtering
 - **OCR Processing**: AWS Textract for document extraction
 - **Orchestration**: Bedrock Agent Core for query management
 
 **Key Architecture Decisions**:
-- S3 Vectors over OpenSearch (cost optimization)
-- Serverless-first (Lambda, EventBridge, S3)
-- Multi-region ready (currently single-region)
-- Stage-based multi-tenancy (dev/staging/prod isolation)
+- ✅ Bedrock native processing (chunking + embedding handled automatically)
+- ✅ S3 Vectors over OpenSearch (cost optimization: $0.024/GB vs $0.24/GB)
+- ✅ Serverless-first (Lambda, EventBridge, S3)
+- ✅ Simplified OCR flow (extract text → save to S3 → Bedrock processes)
+- ✅ Multi-region ready (currently single-region: us-east-1)
+- ✅ Stage-based multi-tenancy (dev/staging/prod isolation)
 
 ---
 
 ## Main Architecture Diagram
 
-### Complete System Architecture
+### Complete System Architecture (Current Implementation)
 
 ```mermaid
 graph TB
     %% User Layer
-    subgraph "User Layer"
-        CLI[AWS CLI / SDK]
-        WebApp[Web Application<br/>Future]
-        API[API Gateway<br/>Future]
+    subgraph "User Interaction"
+        CLI[AWS CLI / SDK<br/>Python Scripts]
+        Future[Web UI<br/>Future]
     end
 
     %% Agent Layer
-    subgraph "Agent & Orchestration Layer"
-        Agent[Bedrock Agent<br/>Claude 3.5 Sonnet]
+    subgraph "AI Agent Layer"
+        Agent[Bedrock Agent Core<br/>Amazon Nova Pro]
         Guardrails[Bedrock Guardrails<br/>PII + Content Filters]
     end
 
     %% RAG Core
-    subgraph "RAG Core - Knowledge Layer"
-        KB[Bedrock Knowledge Base<br/>S3 Vectors Storage]
+    subgraph "Knowledge Base Layer"
+        KB[Bedrock Knowledge Base<br/>Vector Search]
         VectorIndex[S3 Vector Index<br/>AWS::S3Vectors]
-        DataSource[S3 Data Source<br/>documents/ prefix]
+        DataSource[S3 Data Source<br/>docs bucket/documents/]
     end
 
-    %% Document Processing
-    subgraph "Document Processing Pipeline"
-        DocsUpload[S3 Docs Bucket<br/>User Upload]
-        EventBridge[EventBridge Rule<br/>Document Upload Event]
-        OCRLambda[OCR Processor Lambda<br/>Textract Integration]
-        SQSQueue[SQS Chunks Queue<br/>Text Chunks]
-        EmbedderLambda[Embedder Lambda<br/>Titan v2]
-        VectorsBucket[Vectors Bucket<br/>Regular S3<br/>⚠️ See Note]
+    %% Document Processing - SIMPLIFIED
+    subgraph "Document Ingestion Pipeline"
+        Upload[User Upload<br/>to S3 docs bucket]
+        EventBridge[EventBridge Rule<br/>Object Created Event]
+
+        subgraph "Smart Routing"
+            Router{File Type?}
+        end
+
+        subgraph "OCR Path"
+            OCRLambda[OCR Lambda<br/>Textract]
+            ProcessedText[Processed Text<br/>documents/processed-*.txt]
+        end
+
+        subgraph "Direct Path"
+            DirectDocs[Text Documents<br/>.txt .docx .md]
+        end
     end
 
-    %% Sync Process
-    subgraph "Knowledge Base Sync"
-        SyncSchedule[EventBridge Schedule<br/>Every 6 hours]
-        SyncLambda[KB Sync Lambda<br/>Trigger Ingestion]
-        BedrockIngestion[Bedrock Ingestion Job<br/>Chunking + Embedding]
+    %% KB Sync
+    subgraph "Bedrock Native Processing"
+        SyncSchedule[Scheduled Sync<br/>Every 6h]
+        ManualSync[Manual Trigger<br/>via CLI/Lambda]
+        BedrockIngestion[Bedrock Ingestion Job<br/>Chunking + Embedding + Indexing]
     end
 
     %% Monitoring
-    subgraph "Monitoring & Observability"
-        CloudWatch[CloudWatch Logs<br/>All Lambda Logs]
-        Dashboard[CloudWatch Dashboard<br/>Metrics]
-        Alarms[CloudWatch Alarms<br/>Budgets]
-        XRay[X-Ray Tracing<br/>Performance]
+    subgraph "Observability"
+        CloudWatch[CloudWatch Logs]
+        Dashboard[Metrics Dashboard]
+        XRay[X-Ray Tracing]
     end
 
     %% Security
-    subgraph "Security Layer"
-        KMS[KMS Encryption Key<br/>Data Encryption]
-        IAMRoles[IAM Roles<br/>Least Privilege]
-        S3Policies[S3 Bucket Policies<br/>Block Public Access]
+    subgraph "Security"
+        KMS[KMS Encryption<br/>All data at rest]
+        IAM[IAM Roles<br/>Least privilege]
+        S3Policy[Bucket Policies<br/>Block public access]
     end
 
-    %% Connections - User to Agent
-    CLI -->|invoke-agent| Agent
-    WebApp -.->|Future| API
-    API -.->|Future| Agent
+    %% Connections
+    CLI -->|Query| Agent
+    Agent -->|Apply filters| Guardrails
+    Guardrails -->|Generate response| Agent
+    Agent -->|Retrieve context| KB
+    KB -->|Vector search| VectorIndex
+    KB -->|Read documents| DataSource
 
-    %% Agent Flow
-    Agent --> Guardrails
-    Guardrails -->|Safe Content| Agent
-    Agent -->|Query| KB
-    KB -->|Retrieve| VectorIndex
-    KB -->|Read Docs| DataSource
+    Upload --> EventBridge
+    EventBridge --> Router
+    Router -->|Images/PDFs<br/>.png .jpg .pdf| OCRLambda
+    Router -->|Text files<br/>.txt .docx .md| DirectDocs
+    OCRLambda --> ProcessedText
+    ProcessedText --> DataSource
+    DirectDocs --> DataSource
 
-    %% Ingestion Flow - Current Architecture
-    DocsUpload -->|Object Created| EventBridge
-    EventBridge -->|Trigger| OCRLambda
-    OCRLambda -->|Extract Text| OCRLambda
-    OCRLambda -->|Send Chunks| SQSQueue
-    SQSQueue -->|Process| EmbedderLambda
-    EmbedderLambda -->|Generate Embeddings| EmbedderLambda
-    EmbedderLambda -->|Store| VectorsBucket
+    SyncSchedule --> BedrockIngestion
+    ManualSync --> BedrockIngestion
+    BedrockIngestion -->|Read from| DataSource
+    BedrockIngestion -->|Write to| VectorIndex
 
-    %% Bedrock Native Ingestion
-    DocsUpload -->|Source| DataSource
-    SyncSchedule -->|Trigger| SyncLambda
-    SyncLambda -->|Start Ingestion| BedrockIngestion
-    BedrockIngestion -->|Chunk + Embed| VectorIndex
+    Agent --> CloudWatch
+    OCRLambda --> CloudWatch
+    BedrockIngestion --> CloudWatch
+    CloudWatch --> Dashboard
 
-    %% Monitoring Connections
-    Agent -.->|Logs| CloudWatch
-    OCRLambda -.->|Logs| CloudWatch
-    EmbedderLambda -.->|Logs| CloudWatch
-    KB -.->|Logs| CloudWatch
-    CloudWatch -->|Display| Dashboard
-    CloudWatch -->|Trigger| Alarms
-    Agent -.->|Trace| XRay
-
-    %% Security Connections
-    KMS -.->|Encrypt| DocsUpload
-    KMS -.->|Encrypt| VectorsBucket
-    KMS -.->|Encrypt| SQSQueue
-    IAMRoles -.->|Control| Agent
-    IAMRoles -.->|Control| KB
-    IAMRoles -.->|Control| OCRLambda
-    S3Policies -.->|Protect| DocsUpload
+    KMS -.->|Encrypt| DataSource
+    KMS -.->|Encrypt| VectorIndex
+    IAM -.->|Permissions| Agent
+    IAM -.->|Permissions| OCRLambda
+    S3Policy -.->|Protect| DataSource
 
     %% Styling
-    classDef userLayer fill:#e1f5ff,stroke:#01579b,stroke-width:2px
-    classDef agentLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef ragLayer fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    classDef processingLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    classDef monitoringLayer fill:#f1f8e9,stroke:#33691e,stroke-width:2px
-    classDef securityLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    classDef warning fill:#ffebee,stroke:#b71c1c,stroke-width:3px
-
-    class CLI,WebApp,API userLayer
-    class Agent,Guardrails agentLayer
-    class KB,VectorIndex,DataSource ragLayer
-    class DocsUpload,EventBridge,OCRLambda,SQSQueue,EmbedderLambda,SyncSchedule,SyncLambda,BedrockIngestion processingLayer
-    class CloudWatch,Dashboard,Alarms,XRay monitoringLayer
-    class KMS,IAMRoles,S3Policies securityLayer
-    class VectorsBucket warning
+    style Agent fill:#e1f5ff
+    style KB fill:#e8f5e9
+    style OCRLambda fill:#fff4e6
+    style BedrockIngestion fill:#e8f5e9
+    style Router fill:#fff4e6
 ```
 
-**⚠️ Architecture Note**: The `VectorsBucket` (regular S3) stores embeddings from the Embedder Lambda, but Bedrock KB uses `VectorIndex` (AWS::S3Vectors) instead. This creates potential duplication. See [Architecture Simplification Proposal](#architecture-simplification-proposal) below.
+**Key:**
+- 🟦 Blue = AI/ML components
+- 🟩 Green = Bedrock native processing
+- 🟨 Yellow = Custom Lambda processing
 
 ---
 
 ## Document Ingestion Pipeline
 
-### Current Ingestion Flow (with Embedder Lambda)
+### Detailed Ingestion Flow
 
 ```mermaid
 sequenceDiagram
@@ -178,178 +166,148 @@ sequenceDiagram
     participant OCR as OCR Lambda
     participant Textract
     participant SNS as SNS Topic
-    participant SQS as SQS Queue
-    participant Embedder as Embedder Lambda
-    participant Bedrock as Bedrock Runtime
-    participant VectorsS3 as Vectors Bucket (S3)
-    participant Sync as KB Sync Lambda
     participant KB as Bedrock KB
-    participant VectorIdx as Vector Index
+    participant Vector as Vector Index
 
-    User->>S3: Upload document (PDF/DOCX/TXT)
-    S3->>EB: S3 Object Created event
-    EB->>OCR: Trigger OCR Lambda
+    %% Upload
+    User->>S3: Upload document<br/>(with KMS encryption)
+    S3->>EB: Object Created Event
 
-    alt Document requires OCR (PDF/Image)
-        OCR->>Textract: Start document analysis
-        Textract->>SNS: Job complete notification
-        SNS->>OCR: Receive notification
-        OCR->>OCR: Extract text, create chunks
-    else Text-native document
-        OCR->>OCR: Read text, create chunks
+    %% Route based on file type
+    alt Image/PDF (needs OCR)
+        EB->>OCR: Trigger Lambda
+        OCR->>Textract: Start async job<br/>(PNG, JPG, PDF)
+        Textract-->>SNS: Job complete notification
+        SNS->>OCR: SNS trigger
+        OCR->>Textract: Get results
+        OCR->>S3: Save processed text<br/>documents/processed-*.txt
+        Note over OCR,S3: Atomic write with KMS
+    else Text file (no OCR needed)
+        Note over EB: No processing needed<br/>Bedrock reads directly
     end
 
-    OCR->>SQS: Send text chunks
-    SQS->>Embedder: Batch process (10 chunks)
-    Embedder->>Bedrock: Generate embeddings (Titan v2)
-    Bedrock-->>Embedder: Return embeddings
-    Embedder->>VectorsS3: Store embeddings
-
-    Note over VectorsS3: ⚠️ Embeddings stored here<br/>but NOT used by Bedrock KB
-
-    rect rgb(255, 245, 230)
-        Note over Sync,VectorIdx: Bedrock Native Pipeline (Parallel)
-        Sync->>KB: Trigger ingestion job (schedule or manual)
-        KB->>S3: Read original documents
-        KB->>KB: Chunk documents (512 tokens, 20% overlap)
-        KB->>Bedrock: Generate embeddings (Titan v2)
-        Bedrock-->>KB: Return embeddings
-        KB->>VectorIdx: Store vectors in S3 Vector Index
-    end
-
-    Note over Embedder,VectorIdx: ⚠️ DUPLICATION: Embeddings generated TWICE<br/>1. By Embedder Lambda → VectorsS3<br/>2. By Bedrock KB → VectorIdx
+    %% KB Sync (manual or scheduled)
+    User->>KB: Trigger ingestion job<br/>(manual or scheduled)
+    KB->>S3: Read all documents/<br/>including processed/
+    KB->>KB: Bedrock processing:<br/>1. Chunk (512 tokens)<br/>2. Embed (Titan v2)<br/>3. Index
+    KB->>Vector: Write vectors<br/>(S3 Vectors storage)
+    Vector-->>KB: Indexing complete
+    KB-->>User: Ingestion job status:<br/>COMPLETE
 ```
 
-**Processing Time**:
-- OCR (PDF with images): 30-120 seconds
-- OCR (text PDF/DOCX): 5-15 seconds
-- Embedding generation (per chunk): 1-2 seconds
-- KB sync: 2-10 minutes (depending on document count)
+### Smart Routing Logic
+
+The system automatically routes documents based on file type:
+
+| File Type | Extension | Processing Path | Output |
+|-----------|-----------|-----------------|---------|
+| Images | `.png`, `.jpg`, `.jpeg`, `.tiff` | OCR Lambda → Textract | `documents/processed-*.txt` |
+| PDF Documents | `.pdf` | OCR Lambda → Textract | `documents/processed-*.txt` |
+| Text Documents | `.txt`, `.docx`, `.md` | Direct to Bedrock | Original file read directly |
+
+**Why this approach?**
+- ✅ Only process files that need OCR (saves cost)
+- ✅ Text files go directly to Bedrock (faster)
+- ✅ All vectorization handled by Bedrock (consistent, optimized)
 
 ---
 
 ## Query Flow Diagram
 
-### Agent Query Execution Flow
+### Agent Query Processing
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Agent as Bedrock Agent
-    participant Guardrail as Guardrails
+    participant Guard as Guardrails
     participant KB as Knowledge Base
-    participant VectorIdx as Vector Index
-    participant S3 as S3 Docs
-    participant Claude as Claude 3.5 Sonnet
+    participant Vector as Vector Index
+    participant LLM as Amazon Nova Pro
 
-    User->>Agent: invoke-agent (query text)
-    Agent->>Guardrail: Validate input
-    Guardrail-->>Agent: Input safe (or blocked)
+    User->>Agent: Ask question<br/>("What was the incident date?")
 
-    alt Input blocked by guardrail
-        Agent-->>User: "Content violates policy"
-    else Input safe
-        Agent->>KB: Retrieve relevant docs
-        KB->>VectorIdx: Semantic search (embeddings)
-        VectorIdx-->>KB: Top 5 relevant chunks
-        KB->>S3: Fetch full document content
-        S3-->>KB: Document text
-        KB-->>Agent: Retrieved context + citations
+    %% Input filtering
+    Agent->>Guard: Check input
+    Guard->>Guard: Scan for:<br/>- Prompt attacks<br/>- Inappropriate content
+    Guard-->>Agent: Input OK
 
-        Agent->>Claude: Generate response<br/>(query + context)
-        Claude-->>Agent: Generated answer
+    %% Retrieve context
+    Agent->>KB: Retrieve relevant context
+    KB->>Vector: Vector similarity search<br/>(semantic search)
+    Vector-->>KB: Top K chunks (K=5)
+    KB-->>Agent: Context chunks
 
-        Agent->>Guardrail: Validate output
-        Guardrail-->>Agent: Output safe (or filtered)
+    %% Generate response
+    Agent->>LLM: Generate response with:<br/>- User question<br/>- Retrieved context<br/>- System prompt
+    LLM-->>Agent: Generated answer
 
-        Agent-->>User: Final response + sources
+    %% Output filtering
+    Agent->>Guard: Check output
+    Guard->>Guard: Scan for:<br/>- PII (names, SSN, etc.)<br/>- Sensitive content
+    alt PII detected
+        Guard-->>Agent: Block response
+        Agent-->>User: "Content blocked by filters"
+    else No PII
+        Guard-->>Agent: Output OK
+        Agent-->>User: Final answer
     end
 ```
 
-**Query Latency Breakdown**:
-- Guardrail validation (input): 50-100ms
-- KB retrieval: 200-500ms
-- Document fetch: 50-100ms
-- Claude 3.5 Sonnet generation: 1-3 seconds
-- Guardrail validation (output): 50-100ms
-- **Total**: ~2-4 seconds
+### Guardrails Protection
+
+**Input Filters:**
+- ✅ Prompt injection detection
+- ✅ Hate speech detection
+- ✅ Violence/sexual content detection
+
+**Output Filters:**
+- ✅ PII redaction (names, SSN, credit cards, addresses)
+- ✅ Content policy enforcement
+- ✅ Hallucination detection (via Knowledge Base grounding)
 
 ---
 
-## Monitoring and Observability
+## OCR Processing Flow
 
-### Monitoring Architecture
+### Textract Integration Details
 
 ```mermaid
-graph LR
-    subgraph "Data Sources"
-        Agent[Bedrock Agent]
-        OCR[OCR Lambda]
-        Embedder[Embedder Lambda]
-        KB[Knowledge Base]
-        Sync[KB Sync Lambda]
-    end
+flowchart TB
+    Start[PNG/PDF/JPG Upload] --> Check{EventBridge<br/>Rule Match}
+    Check -->|documents/ prefix| OCRStart[OCR Lambda Triggered]
 
-    subgraph "CloudWatch"
-        Logs[CloudWatch Logs<br/>Log Groups]
-        Metrics[CloudWatch Metrics<br/>Custom + AWS]
-        Dashboard[CloudWatch Dashboard<br/>Visualizations]
-        Alarms[CloudWatch Alarms<br/>Thresholds]
-    end
+    OCRStart --> Textract1[Start Textract Job<br/>Async API]
+    Textract1 --> SNS[Textract publishes<br/>to SNS topic]
+    SNS --> OCRCallback[OCR Lambda<br/>SNS trigger]
 
-    subgraph "X-Ray"
-        Traces[X-Ray Traces<br/>Service Map]
-        Analytics[X-Ray Analytics<br/>Performance]
-    end
+    OCRCallback --> GetResults[Get Textract Results<br/>Paginated]
+    GetResults --> Extract[Extract text<br/>from LINE blocks]
 
-    subgraph "Cost Management"
-        Budget[AWS Budgets<br/>Cost Alerts]
-        CostExplorer[Cost Explorer<br/>Analysis]
-    end
+    Extract --> WriteTemp[Write to S3:<br/>documents/processed-{name}.txt]
+    WriteTemp --> Encrypt{KMS<br/>Encryption}
+    Encrypt -->|Success| Done[Processing Complete]
+    Encrypt -->|Error| Retry[Log error & cleanup]
 
-    subgraph "Actions"
-        SNS[SNS Topic<br/>Alerts]
-        Email[Email Notifications]
-        Slack[Slack Integration<br/>Future]
-    end
+    Done --> Wait[Wait for KB Sync<br/>Manual or Scheduled]
+    Wait --> KBRead[Bedrock reads<br/>processed text]
+    KBRead --> Chunk[Bedrock chunks text<br/>512 tokens, 20% overlap]
+    Chunk --> Embed[Bedrock generates embeddings<br/>Titan v2]
+    Embed --> Index[Store in Vector Index<br/>S3 Vectors]
 
-    Agent --> Logs
-    OCR --> Logs
-    Embedder --> Logs
-    KB --> Logs
-    Sync --> Logs
-
-    Agent --> Metrics
-    OCR --> Metrics
-    Embedder --> Metrics
-    KB --> Metrics
-
-    Agent --> Traces
-    OCR --> Traces
-    Embedder --> Traces
-
-    Logs --> Dashboard
-    Metrics --> Dashboard
-    Metrics --> Alarms
-
-    Traces --> Analytics
-
-    Alarms --> SNS
-    Budget --> SNS
-    SNS --> Email
-    SNS -.-> Slack
-
-    Metrics --> CostExplorer
+    style OCRStart fill:#fff4e6
+    style Textract1 fill:#e1f5ff
+    style Chunk fill:#e8f5e9
+    style Embed fill:#e8f5e9
+    style Index fill:#e8f5e9
 ```
 
-**Key Metrics Monitored**:
-- Lambda invocations (OCR, Embedder, Sync)
-- Lambda errors and throttles
-- Agent invocation count
-- Agent response latency
-- KB query latency
-- SQS queue depth
-- Daily costs by service
+**Textract Configuration:**
+- **API**: `StartDocumentTextDetection` (async)
+- **Features**: LINE detection (text extraction)
+- **Notification**: SNS topic triggers Lambda when job completes
+- **Average Duration**: 5-10 seconds for typical documents
+- **Output Format**: Plain text (UTF-8)
 
 ---
 
@@ -360,338 +318,196 @@ graph LR
 ```mermaid
 graph TB
     subgraph "Data Protection"
-        KMS[KMS Encryption<br/>Customer Managed Key]
-        S3Enc[S3 Server-Side<br/>Encryption]
-        SQSEnc[SQS Encryption<br/>KMS]
-        SNSEnc[SNS Encryption<br/>KMS]
+        KMS[KMS Customer Managed Key<br/>e6a714f6-...]
+        S3Encrypt[S3 Server-Side Encryption<br/>aws:kms]
+        InTransit[TLS 1.2+ in transit]
     end
 
     subgraph "Access Control"
-        IAM[IAM Roles<br/>Least Privilege]
-        BucketPolicy[S3 Bucket Policies<br/>Block Public Access]
-        ResourcePolicy[Resource-Based<br/>Policies]
+        IAMRoles[IAM Roles<br/>Least Privilege]
+        BucketPolicy[S3 Bucket Policies<br/>- Block public access<br/>- Require encryption<br/>- Enforce HTTPS]
+        VPCEndpoint[VPC Endpoint<br/>Optional]
     end
 
     subgraph "Content Safety"
-        Guardrails[Bedrock Guardrails]
-        PIIFilter[PII Detection<br/>& Blocking]
-        ContentFilter[Content Filters<br/>Hate/Violence/Sexual]
-        TopicBlock[Topic Blocking<br/>Financial/Medical/Legal]
+        Guardrails[Bedrock Guardrails<br/>- PII Detection<br/>- Content Filtering<br/>- Prompt Attack Detection]
+        Logging[CloudWatch Logs<br/>Audit Trail]
     end
 
     subgraph "Network Security"
-        VPCEndpoints[VPC Endpoints<br/>Future]
-        PrivateLink[PrivateLink<br/>Bedrock Access]
+        PrivateLink[AWS PrivateLink<br/>Bedrock Service]
+        SecGroups[Security Groups<br/>Future VPC deployment]
     end
 
-    subgraph "Audit & Compliance"
-        CloudTrail[CloudTrail<br/>API Logging]
-        ConfigRules[AWS Config<br/>Compliance]
-        GuardDuty[GuardDuty<br/>Threat Detection]
-    end
-
-    KMS --> S3Enc
-    KMS --> SQSEnc
-    KMS --> SNSEnc
-
-    IAM --> BucketPolicy
-    IAM --> ResourcePolicy
-
-    Guardrails --> PIIFilter
-    Guardrails --> ContentFilter
-    Guardrails --> TopicBlock
-
-    VPCEndpoints -.-> PrivateLink
-
-    CloudTrail --> ConfigRules
-    CloudTrail --> GuardDuty
-
-    style PIIFilter fill:#ffebee,stroke:#c62828
-    style ContentFilter fill:#ffebee,stroke:#c62828
-    style TopicBlock fill:#ffebee,stroke:#c62828
+    KMS --> S3Encrypt
+    S3Encrypt --> BucketPolicy
+    IAMRoles --> BucketPolicy
+    Guardrails --> Logging
+    PrivateLink --> Guardrails
 ```
 
-**PII Entities Detected**:
-- Email addresses
-- Phone numbers
-- Social Security Numbers (SSN)
-- Credit card numbers
-- Person names
-- Organizations
-- Physical addresses
-- Dates of birth
-
-**Content Filter Levels**:
-- Sexual content: HIGH
-- Violence: HIGH
-- Hate speech: HIGH
-- Insults: MEDIUM
-- Misconduct: MEDIUM
-- Prompt attacks: HIGH
-
----
-
-## Multi-Tenant Isolation
-
-### Stage-Based Isolation Architecture
-
-```mermaid
-graph TB
-    subgraph "Development Stage"
-        DevDocs[S3: processapp-docs-v2-dev-708819485463]
-        DevVectors[S3: processapp-vectors-v2-dev-708819485463]
-        DevKB[Bedrock KB: processapp-kb-dev]
-        DevAgent[Agent: processapp-agent-dev]
-        DevKMS[KMS: alias/processapp-bedrock-data-dev]
-    end
-
-    subgraph "Staging Stage (Future)"
-        StagingDocs[S3: processapp-docs-v2-staging-708819485463]
-        StagingVectors[S3: processapp-vectors-v2-staging-708819485463]
-        StagingKB[Bedrock KB: processapp-kb-staging]
-        StagingAgent[Agent: processapp-agent-staging]
-        StagingKMS[KMS: alias/processapp-bedrock-data-staging]
-    end
-
-    subgraph "Production Stage (Future)"
-        ProdDocs[S3: processapp-docs-v2-prod-708819485463]
-        ProdVectors[S3: processapp-vectors-v2-prod-708819485463]
-        ProdKB[Bedrock KB: processapp-kb-prod]
-        ProdAgent[Agent: processapp-agent-prod]
-        ProdKMS[KMS: alias/processapp-bedrock-data-prod]
-    end
-
-    style DevDocs fill:#e3f2fd
-    style DevVectors fill:#e3f2fd
-    style DevKB fill:#e3f2fd
-    style DevAgent fill:#e3f2fd
-
-    style StagingDocs fill:#fff3e0
-    style StagingVectors fill:#fff3e0
-    style StagingKB fill:#fff3e0
-    style StagingAgent fill:#fff3e0
-
-    style ProdDocs fill:#e8f5e9
-    style ProdVectors fill:#e8f5e9
-    style ProdKB fill:#e8f5e9
-    style ProdAgent fill:#e8f5e9
-```
-
-**Isolation Guarantees**:
-- Separate S3 buckets per stage
-- Separate IAM roles per stage
-- Separate KMS keys per stage
-- Separate CloudWatch log groups per stage
-- No cross-stage resource access
-
-**Resource Naming Convention**:
-```
-processapp-{resource}-{version}-{stage}-{accountId}
-```
-
-Examples:
-- `processapp-docs-v2-dev-708819485463`
-- `processapp-kb-dev`
-- `processapp-agent-role-dev`
-
----
-
-## Cost Optimization Architecture
-
-### S3 Vectors vs OpenSearch Cost Comparison
-
-```mermaid
-graph LR
-    subgraph "OpenSearch Architecture (OLD)"
-        OSCluster[OpenSearch Cluster<br/>t3.medium x 2]
-        OSStorage[EBS Storage<br/>100 GB]
-        OSSnapshot[Snapshots<br/>Automated]
-        OSCost["💰 Cost: $150-200/month<br/>+ Management overhead"]
-    end
-
-    subgraph "S3 Vectors Architecture (CURRENT)"
-        S3Bucket[S3 Vector Bucket<br/>AWS::S3Vectors]
-        S3Index[Vector Index<br/>Native]
-        S3Storage[S3 Storage<br/>Intelligent Tiering]
-        S3Cost["💰 Cost: $15-25/month<br/>90% reduction<br/>Zero management"]
-    end
-
-    style OSCost fill:#ffebee,stroke:#c62828,stroke-width:3px
-    style S3Cost fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
-```
-
-**Cost Breakdown (1000 documents, 10K queries/month)**:
-
-| Component | OpenSearch | S3 Vectors | Savings |
-|-----------|------------|------------|---------|
-| Compute | $120/month | $0 (serverless) | $120 |
-| Storage | $30/month | $3/month | $27 |
-| Data transfer | $10/month | $2/month | $8 |
-| Management | Manual | Automatic | Time saved |
-| **Total** | **$160/month** | **$5/month** | **~97%** |
-
----
-
-## Architecture Simplification Proposal
-
-### BEFORE: Current Architecture (with Duplication)
-
-```mermaid
-graph TB
-    Upload[Document Upload]
-
-    subgraph "Pipeline 1: Custom Embedding"
-        OCR1[OCR Lambda]
-        SQS1[SQS Queue]
-        Embedder[Embedder Lambda]
-        VectorsS3[Vectors Bucket<br/>Regular S3]
-    end
-
-    subgraph "Pipeline 2: Bedrock Native"
-        KBSync[KB Sync]
-        BedrockChunk[Bedrock Chunking]
-        BedrockEmbed[Bedrock Embedding]
-        VectorIdx[VectorBucket<br/>AWS::S3Vectors]
-    end
-
-    Upload --> OCR1
-    Upload --> KBSync
-    OCR1 --> SQS1
-    SQS1 --> Embedder
-    Embedder --> VectorsS3
-
-    KBSync --> BedrockChunk
-    BedrockChunk --> BedrockEmbed
-    BedrockEmbed --> VectorIdx
-
-    style VectorsS3 fill:#ffebee,stroke:#c62828,stroke-width:3px
-    style Embedder fill:#ffebee,stroke:#c62828,stroke-width:2px
-    style SQS1 fill:#ffebee,stroke:#c62828,stroke-width:2px
-```
-
-**Problems**:
-- ❌ Embeddings generated TWICE (Lambda + Bedrock)
-- ❌ `VectorsBucket` (regular S3) NOT used by Bedrock KB
-- ❌ Extra components (Embedder, SQS)
-- ❌ ~50% higher costs
-- ❌ More points of failure
-
-### AFTER: Simplified Architecture (Proposal)
-
-```mermaid
-graph TB
-    Upload[Document Upload]
-    Router{Smart Routing<br/>by File Type}
-
-    subgraph "OCR Processing (Conditional)"
-        OCR2[OCR Lambda<br/>Text Extraction ONLY]
-        Processed[documents/processed/]
-    end
-
-    subgraph "Bedrock Native Pipeline (Single)"
-        DataSource[Data Source<br/>documents/ + documents/processed/]
-        KBSync2[KB Sync]
-        Bedrock[Bedrock<br/>Chunking + Embedding + Index]
-        VectorIdx2[VectorBucket<br/>AWS::S3Vectors]
-    end
-
-    Upload --> Router
-    Router -->|PDF/Image<br/>Requires OCR| OCR2
-    Router -->|Text Native<br/>TXT/DOCX| DataSource
-    OCR2 --> Processed
-    Processed --> DataSource
-    DataSource --> KBSync2
-    KBSync2 --> Bedrock
-    Bedrock --> VectorIdx2
-
-    style Bedrock fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
-    style VectorIdx2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
-```
-
-**Benefits**:
-- ✅ Embeddings generated ONCE (Bedrock only)
-- ✅ Single pipeline (simpler architecture)
-- ✅ Fewer components (no Embedder, no SQS)
-- ✅ ~50% cost reduction
-- ✅ Fewer failure points
-- ✅ Faster processing (Bedrock optimized)
-
-**To Implement**: See Phase 2.5 in main plan
+**Key Security Features:**
+1. **Encryption at Rest**: All S3 objects encrypted with KMS
+2. **Encryption in Transit**: TLS 1.2+ for all API calls
+3. **PII Protection**: Automatic detection and blocking of sensitive data
+4. **Access Logging**: CloudWatch Logs retain all API calls
+5. **Least Privilege**: Each component has minimal required permissions
 
 ---
 
 ## Component Details
 
-### Stack Dependencies
+### 1. PrereqsStack
 
-```mermaid
-graph TD
-    Prereqs[PrereqsStack<br/>S3, IAM, KMS]
-    Security[SecurityStack<br/>Policies]
-    Bedrock[BedrockStack<br/>KB, Vectors]
-    DocProcessing[DocumentProcessingStack<br/>Lambdas, SQS]
-    Guardrails[GuardrailsStack<br/>Content Safety]
-    Agent[AgentStack<br/>Bedrock Agent]
-    Monitoring[MonitoringStack<br/>CloudWatch]
+**Purpose**: Foundation infrastructure (S3, KMS, IAM)
 
-    Prereqs --> Security
-    Security --> Bedrock
-    Security --> DocProcessing
-    Bedrock --> Agent
-    Guardrails --> Agent
-    Bedrock --> Monitoring
-    DocProcessing --> Monitoring
+| Resource | Name | Purpose |
+|----------|------|---------|
+| S3 Bucket | `processapp-docs-v2-dev-*` | Document storage |
+| S3 Bucket | `processapp-vectors-v2-dev-*` | Legacy (not used) |
+| KMS Key | `processapp-kms-dev` | Data encryption |
+| IAM Role | `processapp-bedrock-kb-role-dev` | Bedrock KB permissions |
 
-    style Prereqs fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
-    style Agent fill:#f3e5f5,stroke:#6a1b9a,stroke-width:3px
-```
+### 2. BedrockStack
 
-### Resource Count by Stack
+**Purpose**: Knowledge Base and Vector Index
 
-| Stack | Resources | Key Components |
-|-------|-----------|----------------|
-| PrereqsStack | 8 | S3 buckets (2), IAM roles (3), KMS key, Log groups (2) |
-| SecurityStack | 6 | IAM policies, S3 bucket policies |
-| BedrockStack | 5 | KB, Data Source, Vector Index, VectorBucket, Sync Lambda |
-| DocumentProcessingStack | 8 | OCR Lambda, Embedder Lambda, SQS (2), SNS, EventBridge (2) |
-| GuardrailsStack | 4 | Guardrail, Version, Custom resource Lambdas (2) |
-| AgentStack | 4 | Agent, Agent Alias, IAM role, Policies |
-| MonitoringStack | 12 | Dashboard, Alarms (5), Metric filters (6) |
-| **Total** | **47** | CloudFormation resources |
+| Resource | Configuration |
+|----------|---------------|
+| Knowledge Base | S3 Vectors storage |
+| Data Source | S3 bucket, `documents/` prefix |
+| Vector Index | AWS::S3Vectors custom resource |
+| Chunking | 512 tokens, 20% overlap |
+| Embedding Model | Amazon Titan Embed Text v2 |
 
-### Deployment Order
+### 3. DocumentProcessingStack
 
-1. **PrereqsStack** (no dependencies)
-2. **SecurityStack** (depends on PrereqsStack)
-3. **BedrockStack** (depends on SecurityStack)
-4. **DocumentProcessingStack** (depends on SecurityStack)
-5. **GuardrailsStack** (no dependencies, can be parallel)
-6. **AgentStack** (depends on BedrockStack + GuardrailsStack)
-7. **MonitoringStack** (depends on BedrockStack + DocumentProcessingStack)
+**Purpose**: OCR processing with Textract
 
-**Deployment Time**: ~15-20 minutes for all stacks
+| Component | Configuration |
+|-----------|---------------|
+| OCR Lambda | Python 3.11, 1024 MB, 60s timeout |
+| SNS Topic | Textract completion notifications |
+| Textract Role | Allows Textract → SNS publish |
+| EventBridge Rule | Triggers on S3 Object Created |
+
+**Environment Variables:**
+- `DOCS_BUCKET`: S3 bucket name
+- `TEXTRACT_SNS_TOPIC_ARN`: SNS topic for notifications
+- `TEXTRACT_ROLE_ARN`: IAM role for Textract
+- `KMS_KEY_ID`: Encryption key
+- `STAGE`: Deployment stage
+
+### 4. AgentStack
+
+**Purpose**: Bedrock Agent Core for queries
+
+| Component | Configuration |
+|-----------|---------------|
+| Foundation Model | `amazon.nova-pro-v1:0` |
+| Agent Alias | `live` (auto-routes to latest version) |
+| Knowledge Base | Connected to RAG KB |
+| Guardrails | PII + content filtering |
+| Temperature | 0.7 |
+| Max Tokens | 4096 |
+
+### 5. GuardrailsStack
+
+**Purpose**: Content safety and PII protection
+
+| Filter Type | Configuration |
+|-------------|---------------|
+| **PII Entities** | EMAIL, PHONE, NAME, ADDRESS, US_SSN, CREDIT_CARD, US_PASSPORT, US_BANK_ACCOUNT, AGE |
+| **Content Filters** | HATE (HIGH), INSULTS (MEDIUM), SEXUAL (HIGH), VIOLENCE (MEDIUM), MISCONDUCT (MEDIUM) |
+| **Prompt Attack** | Input: HIGH, Output: NONE (required) |
+| **Action** | BLOCK on detection |
 
 ---
 
-## References
+## Legacy Components
 
-- [AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
-- [S3 Vectors Announcement](https://aws.amazon.com/blogs/aws/introducing-s3-vector-storage/)
-- [Bedrock Agent Core](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
-- [AWS Textract](https://docs.aws.amazon.com/textract/)
-- Implementation: `infrastructure/lib/`
-- Configuration: `infrastructure/config/environments.ts`
+### ⚠️ Components Deployed but NOT Used
+
+The following exist in the infrastructure but are **inactive**:
+
+| Component | Status | Reason |
+|-----------|--------|--------|
+| **Embedder Lambda** | 🔴 NOT USED | Bedrock generates embeddings natively |
+| **SQS Chunks Queue** | 🔴 NOT USED | No chunking needed; Bedrock handles it |
+| **vectorsBucket (regular S3)** | 🔴 NOT USED | Only VectorBucket (AWS::S3Vectors) is used |
+
+**Why they exist:**
+These were part of the original architecture design (Phase 1) where embedding generation was done manually. After implementing Phase 2.5 (Bedrock native processing), they became obsolete but remain deployed for potential rollback.
+
+**Future Action:**
+May be removed in a future infrastructure cleanup to reduce deployment size and CloudFormation complexity.
+
+---
+
+## Cost Breakdown
+
+### Monthly Cost Estimate (1GB of documents, 1000 queries/month)
+
+| Service | Usage | Cost |
+|---------|-------|------|
+| **S3 Docs Storage** | 1 GB | $0.023 |
+| **S3 Vector Storage** | 1 GB vectors | $0.024 |
+| **Bedrock Embeddings** | 1M tokens | $0.10 |
+| **Bedrock Agent (Nova Pro)** | 1000 queries, 500K tokens | $3.00 |
+| **Textract** | 100 pages OCR | $1.50 |
+| **Lambda Invocations** | 1000 invocations | $0.20 |
+| **CloudWatch Logs** | 5 GB | $0.25 |
+| **KMS** | 1 key | $1.00 |
+| **TOTAL** | | **~$6.00/month** |
+
+**Cost Optimization:**
+- ✅ S3 Vectors: 90% cheaper than OpenSearch ($0.024/GB vs $0.24/GB)
+- ✅ Serverless: No idle costs
+- ✅ Amazon Nova Pro: More cost-effective than Claude models
+
+---
+
+## Deployment Regions
+
+### Current: Single Region
+
+| Region | Stage | Status |
+|--------|-------|--------|
+| us-east-1 | dev | ✅ Active |
+
+### Future: Multi-Region
+
+Planned regions for production:
+- **us-east-1** (Primary)
+- **eu-west-1** (Europe)
+- **ap-southeast-1** (APAC)
+
+Multi-region requires:
+- Cross-region S3 replication
+- DynamoDB global tables (for session state)
+- Route53 for DNS failover
 
 ---
 
 ## Change Log
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-04-17 | 1.0 | Initial architecture documentation |
-| TBD | 2.0 | After Phase 2.5 simplification (if implemented) |
+### Version 2.0 (2026-04-21)
+- ✅ Simplified architecture: Bedrock native processing
+- ✅ Removed custom chunking/embedding logic
+- ✅ OCR Lambda only extracts text (no SQS)
+- ✅ Updated model: Amazon Nova Pro
+- ✅ Marked legacy components
+
+### Version 1.0 (2026-04-17)
+- Initial architecture with Embedder Lambda
+- Custom chunking and embedding pipeline
+- Claude 3.5 Sonnet model
 
 ---
 
-**Status**: Current architecture documentation
-**Next Update**: After Phase 2.5 (architectural simplification) if implemented
+## References
+
+- [AWS Bedrock Knowledge Bases](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html)
+- [S3 Vector Storage](https://aws.amazon.com/blogs/aws/introducing-s3-vector-storage/)
+- [AWS Textract](https://docs.aws.amazon.com/textract/latest/dg/what-is.html)
+- [Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html)
