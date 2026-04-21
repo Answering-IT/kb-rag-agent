@@ -65,7 +65,17 @@ Multi-tenant RAG (Retrieval-Augmented Generation) infrastructure using AWS Bedro
 │                        Query Agent                               │
 └─────────────────────────────────────────────────────────────────┘
                             │
-                            ▼
+                ┌───────────┴───────────┐
+                │                       │
+                ▼                       ▼
+    ┌───────────────────┐   ┌──────────────────────┐
+    │ REST API          │   │ AWS SDK (Direct)     │
+    │ (API Gateway)     │   │ bedrock-agent        │
+    │ + API Key Auth    │   │ -runtime             │
+    └─────────┬─────────┘   └──────────┬───────────┘
+              │                        │
+              └────────────┬───────────┘
+                           ▼
         ┌───────────────────────────────────────┐
         │ Bedrock Agent Core                    │
         │ - Model: Amazon Nova Pro              │
@@ -145,7 +155,58 @@ aws bedrock-agent get-ingestion-job \
 
 ## 💬 Querying the Agent
 
-### Using Python SDK
+### Option 1: Via REST API (Recommended for Backends)
+
+The agent is exposed via API Gateway for easy integration from any backend.
+
+**Endpoint:** `https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query`
+
+**Get API Key:**
+```bash
+# Ask admin to retrieve API key
+aws apigateway get-api-key --api-key 6a0h023lec --include-value --query 'value' --output text
+
+# Set as environment variable
+export API_KEY="<your-api-key>"
+```
+
+**Quick Example (curl):**
+```bash
+curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: ${API_KEY}" \
+  -d '{"question": "What documents do you have?"}'
+```
+
+**Python Example:**
+```python
+import requests
+
+API_ENDPOINT = "https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query"
+API_KEY = "your-api-key"
+
+response = requests.post(
+    API_ENDPOINT,
+    headers={"Content-Type": "application/json", "x-api-key": API_KEY},
+    json={"question": "What was the incident date?"}
+)
+
+result = response.json()
+print(result['answer'])
+```
+
+**Test Script:**
+```bash
+# Set API key first
+export API_KEY="your-api-key"
+
+# Run tests
+python3 test-api.py
+```
+
+📖 **Full API Documentation:** [docs/API_USAGE.md](docs/API_USAGE.md)
+
+### Option 2: Using Python SDK (Direct AWS Access)
 
 Create a script `query-agent.py`:
 
