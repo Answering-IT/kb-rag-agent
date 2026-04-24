@@ -465,7 +465,7 @@ console.log(data.answer);
 ```bash
 curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
   -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_KEY" \
+  -H "x-api-key: x5ots6txyN5Zz0bychGjraWWpY7ialv13BalOXUV" \
   -d '{"question": "What documents do you have?"}'
 ```
 
