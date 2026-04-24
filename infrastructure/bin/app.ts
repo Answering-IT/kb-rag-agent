@@ -59,7 +59,7 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           docsBucket: prereqsStack.docsBucket,
-          vectorsBucket: prereqsStack.vectorsBucket,
+          // vectorsBucket: prereqsStack.vectorsBucket, // REMOVED (Phase 2)
           bedrockKBRole: prereqsStack.bedrockKBRole,
           kmsKey: prereqsStack.kmsKey,
           env,
@@ -74,7 +74,7 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           docsBucket: prereqsStack.docsBucket,
-          vectorsBucket: prereqsStack.vectorsBucket,
+          // vectorsBucket: prereqsStack.vectorsBucket, // REMOVED (Phase 2) - BedrockStack creates own AWS::S3Vectors bucket
           bedrockKBRole: prereqsStack.bedrockKBRole,
           kmsKey: prereqsStack.kmsKey,
           env,
@@ -89,7 +89,7 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           docsBucket: prereqsStack.docsBucket,
-          vectorsBucket: prereqsStack.vectorsBucket,
+          // vectorsBucket: prereqsStack.vectorsBucket, // REMOVED (Phase 2) - only used by Embedder (Phase 3)
           kmsKey: prereqsStack.kmsKey,
           env,
         }
@@ -141,8 +141,8 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           ocrProcessor: docProcessingStack.ocrProcessor,
-          embedder: docProcessingStack.embedder,
-          chunksQueue: docProcessingStack.chunksQueue,
+          // embedder: docProcessingStack.embedder, // REMOVED (Phase 2)
+          // chunksQueue: docProcessingStack.chunksQueue, // REMOVED (Phase 2)
           knowledgeBaseId: bedrockStack.knowledgeBaseId,
           env,
         }

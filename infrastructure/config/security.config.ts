@@ -167,7 +167,7 @@ export function getS3BucketPolicyStatements(
  */
 export function getBedrockKBPolicy(
   docsBucketArn: string,
-  vectorsBucketArn: string,
+  vectorsBucketArn: string | undefined, // Made optional (Phase 2) - regular S3 bucket removed
   kmsKeyArn: string,
   region: string,
   accountId?: string,
@@ -180,19 +180,6 @@ export function getBedrockKBPolicy(
       effect: iam.Effect.ALLOW,
       actions: ['s3:GetObject', 's3:ListBucket'],
       resources: [docsBucketArn, `${docsBucketArn}/*`],
-    }),
-
-    // S3 write access for vectors bucket
-    new iam.PolicyStatement({
-      sid: 'WriteVectorsBucket',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        's3:PutObject',
-        's3:DeleteObject',
-        's3:GetObject',
-        's3:ListBucket',
-      ],
-      resources: [vectorsBucketArn, `${vectorsBucketArn}/*`],
     }),
 
     // Bedrock model access
@@ -234,6 +221,24 @@ export function getBedrockKBPolicy(
     }),
   ];
 
+  // S3 write access for vectors bucket - REMOVED (Phase 2)
+  // Regular S3 vectors bucket no longer used, Bedrock uses AWS::S3Vectors instead
+  if (vectorsBucketArn) {
+    statements.push(
+      new iam.PolicyStatement({
+        sid: 'WriteVectorsBucket',
+        effect: iam.Effect.ALLOW,
+        actions: [
+          's3:PutObject',
+          's3:DeleteObject',
+          's3:GetObject',
+          's3:ListBucket',
+        ],
+        resources: [vectorsBucketArn, `${vectorsBucketArn}/*`],
+      })
+    );
+  }
+
   // S3 Vectors access (all vector indices in the bucket)
   if (accountId && vectorsBucketName) {
     statements.push(
@@ -265,84 +270,91 @@ export function getBedrockKBPolicy(
  */
 export function getLambdaOCRProcessorPolicy(
   docsBucketArn: string,
-  sqsQueueArn: string,
+  sqsQueueArn: string | undefined, // Made optional (Phase 2) - OCR doesn't use SQS
   kmsKeyArn: string,
   region: string
 ): iam.PolicyDocument {
-  return new iam.PolicyDocument({
-    statements: [
-      // S3 read/write access
-      new iam.PolicyStatement({
-        sid: 'AccessDocumentsBucket',
-        effect: iam.Effect.ALLOW,
-        actions: [
-          's3:GetObject',
-          's3:GetObjectVersion',
-          's3:PutObject',  // Allow writing processed text back to S3
-        ],
-        resources: [`${docsBucketArn}/*`],
-      }),
+  const statements = [
+    // S3 read/write access
+    new iam.PolicyStatement({
+      sid: 'AccessDocumentsBucket',
+      effect: iam.Effect.ALLOW,
+      actions: [
+        's3:GetObject',
+        's3:GetObjectVersion',
+        's3:PutObject',  // Allow writing processed text back to S3
+      ],
+      resources: [`${docsBucketArn}/*`],
+    }),
 
-      // Textract access
-      new iam.PolicyStatement({
-        sid: 'StartTextractJobs',
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'textract:StartDocumentTextDetection',
-          'textract:StartDocumentAnalysis',
-          'textract:GetDocumentTextDetection',
-          'textract:GetDocumentAnalysis',
-        ],
-        resources: ['*'],
-      }),
+    // Textract access
+    new iam.PolicyStatement({
+      sid: 'StartTextractJobs',
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'textract:StartDocumentTextDetection',
+        'textract:StartDocumentAnalysis',
+        'textract:GetDocumentTextDetection',
+        'textract:GetDocumentAnalysis',
+      ],
+      resources: ['*'],
+    }),
+  ];
 
-      // SQS send message
+  // SQS send message - REMOVED (Phase 2)
+  // OCR processor doesn't send messages to SQS
+  if (sqsQueueArn) {
+    statements.push(
       new iam.PolicyStatement({
         sid: 'SendToSQSQueue',
         effect: iam.Effect.ALLOW,
         actions: ['sqs:SendMessage', 'sqs:GetQueueAttributes'],
         resources: [sqsQueueArn],
-      }),
+      })
+    );
+  }
 
-      // KMS encrypt/decrypt (for S3 objects)
-      new iam.PolicyStatement({
-        sid: 'EncryptDecryptWithKMS',
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'kms:Decrypt',
-          'kms:Encrypt',
-          'kms:GenerateDataKey',  // Required for PutObject with KMS
-          'kms:DescribeKey',
-        ],
-        resources: [kmsKeyArn],
-      }),
+  statements.push(
+    // KMS encrypt/decrypt (for S3 objects)
+    new iam.PolicyStatement({
+      sid: 'EncryptDecryptWithKMS',
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'kms:Decrypt',
+        'kms:Encrypt',
+        'kms:GenerateDataKey',  // Required for PutObject with KMS
+        'kms:DescribeKey',
+      ],
+      resources: [kmsKeyArn],
+    }),
 
-      // CloudWatch Logs
-      new iam.PolicyStatement({
-        sid: 'WriteCloudWatchLogs',
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'logs:CreateLogGroup',
-          'logs:CreateLogStream',
-          'logs:PutLogEvents',
-        ],
-        resources: [
-          `arn:aws:logs:${region}:*:log-group:/aws/lambda/*`,
-        ],
-      }),
+    // CloudWatch Logs
+    new iam.PolicyStatement({
+      sid: 'WriteCloudWatchLogs',
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'logs:CreateLogGroup',
+        'logs:CreateLogStream',
+        'logs:PutLogEvents',
+      ],
+      resources: [
+        `arn:aws:logs:${region}:*:log-group:/aws/lambda/*`,
+      ],
+    }),
 
-      // X-Ray tracing
-      new iam.PolicyStatement({
-        sid: 'WriteXRayTraces',
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'xray:PutTraceSegments',
-          'xray:PutTelemetryRecords',
-        ],
-        resources: ['*'],
-      }),
-    ],
-  });
+    // X-Ray tracing
+    new iam.PolicyStatement({
+      sid: 'WriteXRayTraces',
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'xray:PutTraceSegments',
+        'xray:PutTelemetryRecords',
+      ],
+      resources: ['*'],
+    })
+  );
+
+  return new iam.PolicyDocument({ statements });
 }
 
 /**

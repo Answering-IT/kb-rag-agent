@@ -26,7 +26,7 @@ export interface SecurityStackProps extends cdk.StackProps {
   stage: string;
   accountId: string;
   docsBucket: s3.IBucket;
-  vectorsBucket: s3.IBucket;
+  vectorsBucket?: s3.IBucket; // REMOVED (Phase 2) - made optional, will be fully removed in Phase 3
   bedrockKBRole: iam.IRole;
   kmsKey: kms.IKey;
 }
@@ -99,7 +99,9 @@ export class SecurityStack extends cdk.Stack {
       new iam.ArnPrincipal(`arn:aws:iam::${props.accountId}:user/qohat.prettel`)
     );
 
-    // Vectors bucket policy
+    // Vectors bucket policy - REMOVED (Phase 2)
+    // This bucket was removed and is no longer needed
+    /*
     const vectorsBucketPolicyStatements = getS3BucketPolicyStatements(
       props.vectorsBucket.bucketArn,
       props.accountId
@@ -108,18 +110,19 @@ export class SecurityStack extends cdk.Stack {
     vectorsBucketPolicyStatements.forEach((statement) => {
       props.vectorsBucket.addToResourcePolicy(statement);
     });
+    */
 
     // ========================================
     // IAM POLICIES
     // ========================================
 
     // Bedrock Knowledge Base policy
-    // Note: S3 vector bucket is created in BedrockStack, so we construct the name here
+    // Note: S3 vector bucket (AWS::S3Vectors) is created in BedrockStack
     const vectorBucketName = `processapp-vectors-${props.stage}-${props.accountId}`;
 
     const bedrockKBPolicy = getBedrockKBPolicy(
       props.docsBucket.bucketArn,
-      props.vectorsBucket.bucketArn,
+      undefined, // vectorsBucket removed (Phase 2) - Bedrock uses AWS::S3Vectors instead
       props.kmsKey.keyArn,
       region,
       props.accountId,
@@ -135,7 +138,7 @@ export class SecurityStack extends cdk.Stack {
 
     // Grant Bedrock KB role access to buckets
     props.docsBucket.grantRead(props.bedrockKBRole);
-    props.vectorsBucket.grantReadWrite(props.bedrockKBRole);
+    // props.vectorsBucket.grantReadWrite(props.bedrockKBRole); // REMOVED (Phase 2)
 
     // Grant Bedrock KB role KMS access
     props.kmsKey.grantEncryptDecrypt(props.bedrockKBRole);
