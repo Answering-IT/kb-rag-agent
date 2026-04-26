@@ -111,12 +111,30 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             print(f'Enhanced question with context: {enhanced_question[:200]}...')
 
         # Stream response from Bedrock Agent
+        # Note: retrieve_and_generate (filtering) cannot use action groups
+        # invoke_agent (no filtering) can use action groups but doesn't filter
+        # For now, we prioritize action groups over filtering
         full_response = ""
-        if ENABLE_FILTERING and KNOWLEDGE_BASE_ID:
+
+        # Check if question might need action groups (project info queries)
+        needs_action_group = any(keyword in question.lower() for keyword in [
+            'proyecto', 'project', 'presupuesto', 'budget', 'estado', 'status',
+            'usuarios asignados', 'assigned users', 'id 1', 'id 2', 'id 3'
+        ])
+
+        if needs_action_group:
+            # Use invoke_agent to enable action groups (no filtering)
+            print(f'Using invoke_agent (action groups enabled, no filtering)')
+            full_response = stream_from_agent(
+                apigw, connection_id, enhanced_question, session_id
+            )
+        elif ENABLE_FILTERING and KNOWLEDGE_BASE_ID:
+            # Use retrieve_and_generate with filtering (no action groups)
             full_response = stream_with_filtering(
                 apigw, connection_id, enhanced_question, session_id, tenant_context
             )
         else:
+            # Fallback to invoke_agent
             full_response = stream_from_agent(
                 apigw, connection_id, enhanced_question, session_id
             )

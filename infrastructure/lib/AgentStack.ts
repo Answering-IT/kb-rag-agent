@@ -154,11 +154,11 @@ export class AgentStack extends cdk.Stack {
       // Idle session TTL (in seconds)
       idleSessionTtlInSeconds: AgentConfig.idleSessionTTL,
 
-      // Guardrail configuration
-      guardrailConfiguration: {
-        guardrailIdentifier: props.guardrailId,
-        guardrailVersion: props.guardrailVersion,
-      },
+      // Guardrail configuration - TEMPORARILY DISABLED (guardrail does not exist)
+      // guardrailConfiguration: {
+      //   guardrailIdentifier: props.guardrailId,
+      //   guardrailVersion: props.guardrailVersion,
+      // },
 
       // Knowledge bases to use
       knowledgeBases: [
