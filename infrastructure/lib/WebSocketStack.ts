@@ -76,6 +76,17 @@ export class WebSocketStack extends cdk.Stack {
       })
     );
 
+    // Grant permissions to invoke foundation model (required by retrieve_and_generate)
+    wsHandlerRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${region}::foundation-model/amazon.nova-pro-v1:0`,
+        ],
+      })
+    );
+
     // Grant permissions to post to WebSocket connections
     // Note: Cannot specify specific API ARN here, will grant * and rely on IAM best practices
     wsHandlerRole.addToPolicy(
