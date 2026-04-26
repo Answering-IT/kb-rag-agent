@@ -9,9 +9,8 @@ import boto3
 import uuid
 from typing import Dict, Any
 
-# Import metadata filter from api-handler
-import sys
-sys.path.append('/opt/python')  # For Lambda layers if needed
+# Import session memory module
+from session_memory import SessionMemory
 
 # AWS clients
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime')
@@ -24,6 +23,10 @@ FOUNDATION_MODEL = os.environ.get('FOUNDATION_MODEL', 'amazon.nova-pro-v1:0')
 REGION = os.environ.get('AWS_REGION', 'us-east-1')
 STAGE = os.environ['STAGE']
 ENABLE_FILTERING = os.environ.get('ENABLE_METADATA_FILTERING', 'true').lower() == 'true'
+CONVERSATION_TABLE = os.environ.get('CONVERSATION_TABLE', '')
+
+# Initialize session memory (if table is configured)
+session_memory = SessionMemory(CONVERSATION_TABLE) if CONVERSATION_TABLE else None
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -99,14 +102,46 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'sessionId': session_id
         })
 
+        # Inject conversation context if session memory is enabled
+        enhanced_question = question
+        if session_memory:
+            enhanced_question = session_memory.inject_context_in_prompt(
+                question, session_id, context_limit=10
+            )
+            print(f'Enhanced question with context: {enhanced_question[:200]}...')
+
         # Stream response from Bedrock Agent
+        full_response = ""
         if ENABLE_FILTERING and KNOWLEDGE_BASE_ID:
-            stream_with_filtering(
-                apigw, connection_id, question, session_id, tenant_context
+            full_response = stream_with_filtering(
+                apigw, connection_id, enhanced_question, session_id, tenant_context
             )
         else:
-            stream_from_agent(
-                apigw, connection_id, question, session_id
+            full_response = stream_from_agent(
+                apigw, connection_id, enhanced_question, session_id
+            )
+
+        # Save conversation to DynamoDB
+        if session_memory and full_response:
+            user_id = tenant_context.get('user_id')
+            tenant_id = tenant_context.get('tenant_id')
+
+            # Save user message
+            session_memory.save_message(
+                session_id=session_id,
+                role='user',
+                content=question,  # Save original question, not enhanced
+                user_id=user_id,
+                tenant_id=tenant_id
+            )
+
+            # Save assistant response
+            session_memory.save_message(
+                session_id=session_id,
+                role='assistant',
+                content=full_response,
+                user_id=user_id,
+                tenant_id=tenant_id
             )
 
         return {'statusCode': 200}
@@ -126,10 +161,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 def stream_with_filtering(
     apigw, connection_id: str, question: str, session_id: str, tenant_context: Dict
-):
+) -> str:
     """
     Stream response from Bedrock KB with metadata filtering
     Uses retrieve_and_generate for native filtering
+
+    Returns:
+        Full response text for saving to session memory
     """
     print(f'Streaming with filtering - Tenant: {tenant_context.get("tenant_id")}')
 
@@ -178,16 +216,21 @@ def stream_with_filtering(
             'totalChunks': len(chunks)
         })
 
+        return answer  # Return full response for session memory
+
     except Exception as e:
         print(f'Error in streaming with filtering: {str(e)}')
         send_error(apigw, connection_id, f'Filtering error: {str(e)}')
         raise
 
 
-def stream_from_agent(apigw, connection_id: str, question: str, session_id: str):
+def stream_from_agent(apigw, connection_id: str, question: str, session_id: str) -> str:
     """
     Stream response from Bedrock Agent (without filtering)
     Uses invoke_agent for true streaming
+
+    Returns:
+        Full response text for saving to session memory
     """
     print(f'Streaming from agent without filtering')
 
@@ -201,12 +244,14 @@ def stream_from_agent(apigw, connection_id: str, question: str, session_id: str)
         )
 
         # Stream response chunks
+        full_response = ""
         chunk_index = 0
         for event_chunk in response['completion']:
             if 'chunk' in event_chunk:
                 chunk = event_chunk['chunk']
                 if 'bytes' in chunk:
                     text = chunk['bytes'].decode('utf-8')
+                    full_response += text
 
                     send_message(apigw, connection_id, {
                         'type': 'chunk',
@@ -223,6 +268,8 @@ def stream_from_agent(apigw, connection_id: str, question: str, session_id: str)
             'sessionId': session_id,
             'totalChunks': chunk_index
         })
+
+        return full_response  # Return full response for session memory
 
     except Exception as e:
         print(f'Error in streaming from agent: {str(e)}')
