@@ -103,20 +103,6 @@ export class AgentStack extends cdk.Stack {
     // ========================================
     // ACTION GROUP: GET PROJECT INFO TOOL
     // ========================================
-    // TEMPORARILY DISABLED - Will deploy in follow-up
-    // TODO: Enable after metadata filtering is deployed and tested
-
-    /*
-    // Upload OpenAPI schema to S3
-    new s3deploy.BucketDeployment(this, 'ToolSchemas', {
-      sources: [
-        s3deploy.Source.asset(
-          path.join(__dirname, '../lambdas/agent-tools/schemas')
-        ),
-      ],
-      destinationBucket: props.docsBucket,
-      destinationKeyPrefix: 'schemas/',
-    });
 
     // Create Lambda for GetProjectInfo tool
     const getProjectInfoTool = new lambda.Function(this, 'GetProjectInfoTool', {
@@ -128,7 +114,13 @@ export class AgentStack extends cdk.Stack {
       ),
       timeout: cdk.Duration.seconds(15),
       memorySize: 256,
+      environment: {
+        ECS_BASE_URL: 'https://dev.app.colpensiones.procesapp.com',
+        STAGE: props.stage,
+      },
       description: 'Action group tool to get project information from ECS service',
+      // Disable automatic LogGroup creation by CDK
+      logRetention: undefined,
     });
 
     // Grant agent role permission to invoke tool Lambda
@@ -147,7 +139,6 @@ export class AgentStack extends cdk.Stack {
       sourceAccount: props.accountId,
       sourceArn: `arn:aws:bedrock:${region}:${props.accountId}:agent/*`,
     });
-    */
 
     // ========================================
     // BEDROCK AGENT
@@ -179,8 +170,69 @@ export class AgentStack extends cdk.Stack {
       ],
 
       // Action groups (tools)
-      // TEMPORARILY DISABLED - Will deploy in follow-up
-      // actionGroups: [],
+      actionGroups: [
+        {
+          actionGroupName: 'GetProjectInfo',
+          description: 'Retrieve project information from ECS service including budget, status, and users',
+          actionGroupState: 'ENABLED',
+          actionGroupExecutor: {
+            lambda: getProjectInfoTool.functionArn,
+          },
+          apiSchema: {
+            payload: JSON.stringify({
+              openapi: '3.0.0',
+              info: {
+                title: 'Project Information API',
+                version: '1.0.0',
+                description: 'API to retrieve project information from ECS service',
+              },
+              paths: {
+                '/organization/{orgId}/projects/{projectId}': {
+                  get: {
+                    summary: 'Get project information by ID',
+                    description: 'Retrieves detailed information about a specific project',
+                    operationId: 'getProjectInfo',
+                    parameters: [
+                      {
+                        name: 'orgId',
+                        in: 'path',
+                        description: 'Organization ID',
+                        required: true,
+                        schema: { type: 'string' },
+                      },
+                      {
+                        name: 'projectId',
+                        in: 'path',
+                        description: 'Project ID',
+                        required: true,
+                        schema: { type: 'string' },
+                      },
+                    ],
+                    responses: {
+                      '200': {
+                        description: 'Project information retrieved successfully',
+                        content: {
+                          'application/json': {
+                            schema: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'string' },
+                                name: { type: 'string' },
+                                budget: { type: 'number' },
+                                status: { type: 'string' },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            }),
+          },
+        },
+      ],
 
       // Prompt override configuration (optional)
       promptOverrideConfiguration: AgentConfig.promptOverride.enabled
