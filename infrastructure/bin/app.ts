@@ -22,6 +22,7 @@ import { MonitoringStack } from '../lib/MonitoringStack';
 import { AgentStack } from '../lib/AgentStack';
 import { APIStack } from '../lib/APIStack';
 import { SessionMemoryStack } from '../lib/SessionMemoryStack';
+import { WebSocketStack } from '../lib/WebSocketStack';
 
 /**
  * Main App
@@ -148,6 +149,23 @@ SDLCAccounts.forEach((account) => {
       apiStack.addDependency(agentStack);
       apiStack.addDependency(sessionMemoryStack);
 
+      // WebSocket API for streaming responses
+      const webSocketStack = new WebSocketStack(
+        app,
+        `${account.stage}-${region}-websocket`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          agentId: agentStack.agentId,
+          agentAliasId: agentStack.agentAliasId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          conversationTableName: sessionMemoryStack.conversationTable.tableName,
+          env,
+        }
+      );
+      webSocketStack.addDependency(agentStack);
+      webSocketStack.addDependency(sessionMemoryStack);
+
       const monitoringStack = new MonitoringStack(
         app,
         `${account.stage}-${region}-monitoring`,
@@ -174,6 +192,7 @@ SDLCAccounts.forEach((account) => {
         cdk.Tags.of(sessionMemoryStack).add(key, value);
         cdk.Tags.of(agentStack).add(key, value);
         cdk.Tags.of(apiStack).add(key, value);
+        cdk.Tags.of(webSocketStack).add(key, value);
         cdk.Tags.of(monitoringStack).add(key, value);
       });
     } else {
