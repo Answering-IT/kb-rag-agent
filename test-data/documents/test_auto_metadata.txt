@@ -1,0 +1,17 @@
+TENANT 3 - AUTOMATED METADATA TEST
+
+This document tests the automatic metadata.json generation feature.
+
+The OCR Lambda should automatically create a companion metadata.json file
+when this document is uploaded with S3 object metadata.
+
+This validates that the metadata preservation pipeline works correctly:
+1. Upload document with S3 object metadata
+2. OCR Lambda reads the metadata
+3. OCR Lambda generates .metadata.json companion file
+4. Bedrock KB ingests both files together
+5. Metadata filtering works correctly
+
+Tenant: 3
+Role: admin
+Project: auto-test
