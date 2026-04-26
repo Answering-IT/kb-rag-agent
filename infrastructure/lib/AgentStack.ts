@@ -11,8 +11,12 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
 import { AgentConfig } from '../config/environments';
+import * as path from 'path';
 
 export interface AgentStackProps extends cdk.StackProps {
   stage: string;
@@ -20,6 +24,7 @@ export interface AgentStackProps extends cdk.StackProps {
   knowledgeBaseId: string;
   guardrailId: string;
   guardrailVersion: string;
+  docsBucket: s3.IBucket;
 }
 
 export class AgentStack extends cdk.Stack {
@@ -96,6 +101,55 @@ export class AgentStack extends cdk.Stack {
     );
 
     // ========================================
+    // ACTION GROUP: GET PROJECT INFO TOOL
+    // ========================================
+    // TEMPORARILY DISABLED - Will deploy in follow-up
+    // TODO: Enable after metadata filtering is deployed and tested
+
+    /*
+    // Upload OpenAPI schema to S3
+    new s3deploy.BucketDeployment(this, 'ToolSchemas', {
+      sources: [
+        s3deploy.Source.asset(
+          path.join(__dirname, '../lambdas/agent-tools/schemas')
+        ),
+      ],
+      destinationBucket: props.docsBucket,
+      destinationKeyPrefix: 'schemas/',
+    });
+
+    // Create Lambda for GetProjectInfo tool
+    const getProjectInfoTool = new lambda.Function(this, 'GetProjectInfoTool', {
+      functionName: `processapp-get-project-info-${props.stage}`,
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'get_project_info.handler',
+      code: lambda.Code.fromAsset(
+        path.join(__dirname, '../lambdas/agent-tools')
+      ),
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 256,
+      description: 'Action group tool to get project information from ECS service',
+    });
+
+    // Grant agent role permission to invoke tool Lambda
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['lambda:InvokeFunction'],
+        resources: [getProjectInfoTool.functionArn],
+      })
+    );
+
+    // Grant Lambda permission to be invoked by Bedrock
+    getProjectInfoTool.addPermission('BedrockInvoke', {
+      principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceAccount: props.accountId,
+      sourceArn: `arn:aws:bedrock:${region}:${props.accountId}:agent/*`,
+    });
+    */
+
+    // ========================================
     // BEDROCK AGENT
     // ========================================
 
@@ -123,6 +177,10 @@ export class AgentStack extends cdk.Stack {
           knowledgeBaseState: 'ENABLED',
         },
       ],
+
+      // Action groups (tools)
+      // TEMPORARILY DISABLED - Will deploy in follow-up
+      // actionGroups: [],
 
       // Prompt override configuration (optional)
       promptOverrideConfiguration: AgentConfig.promptOverride.enabled

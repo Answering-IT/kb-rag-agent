@@ -1,0 +1,18 @@
+COLPENSIONES - INFORMACIÓN GENERAL DEL TENANT 1
+
+Este documento contiene información general sobre Colpensiones para el tenant 1.
+
+Colpensiones es una entidad pública encargada de administrar el régimen de prima media
+del Sistema General de Pensiones en Colombia.
+
+SERVICIOS PRINCIPALES:
+- Reconocimiento de pensiones
+- Pago de mesadas pensionales
+- Gestión de aportes
+- Atención al usuario
+
+MISIÓN:
+Garantizar el pago oportuno de las pensiones y gestionar los recursos del régimen
+de prima media con eficiencia y transparencia.
+
+Esta información es accesible para todos los usuarios del tenant 1 con rol viewer o editor.

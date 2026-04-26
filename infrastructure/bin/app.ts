@@ -21,6 +21,7 @@ import { GuardrailsStack } from '../lib/GuardrailsStack';
 import { MonitoringStack } from '../lib/MonitoringStack';
 import { AgentStack } from '../lib/AgentStack';
 import { APIStack } from '../lib/APIStack';
+import { SessionMemoryStack } from '../lib/SessionMemoryStack';
 
 /**
  * Main App
@@ -106,6 +107,15 @@ SDLCAccounts.forEach((account) => {
         }
       );
 
+      const sessionMemoryStack = new SessionMemoryStack(
+        app,
+        `${account.stage}-${region}-session-memory`,
+        {
+          stage: account.stage,
+          env,
+        }
+      );
+
       const agentStack = new AgentStack(
         app,
         `${account.stage}-${region}-agent`,
@@ -115,6 +125,7 @@ SDLCAccounts.forEach((account) => {
           knowledgeBaseId: bedrockStack.knowledgeBaseId,
           guardrailId: guardrailsStack.guardrailId,
           guardrailVersion: guardrailsStack.guardrailVersion,
+          docsBucket: prereqsStack.docsBucket,
           env,
         }
       );
@@ -129,10 +140,13 @@ SDLCAccounts.forEach((account) => {
           accountId: account.id,
           agentId: agentStack.agentId,
           agentAliasId: agentStack.agentAliasId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          conversationTable: sessionMemoryStack.conversationTable,
           env,
         }
       );
       apiStack.addDependency(agentStack);
+      apiStack.addDependency(sessionMemoryStack);
 
       const monitoringStack = new MonitoringStack(
         app,
@@ -157,6 +171,7 @@ SDLCAccounts.forEach((account) => {
         cdk.Tags.of(bedrockStack).add(key, value);
         cdk.Tags.of(docProcessingStack).add(key, value);
         cdk.Tags.of(guardrailsStack).add(key, value);
+        cdk.Tags.of(sessionMemoryStack).add(key, value);
         cdk.Tags.of(agentStack).add(key, value);
         cdk.Tags.of(apiStack).add(key, value);
         cdk.Tags.of(monitoringStack).add(key, value);

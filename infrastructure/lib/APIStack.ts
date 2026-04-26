@@ -13,6 +13,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -21,6 +22,8 @@ export interface APIStackProps extends cdk.StackProps {
   accountId: string;
   agentId: string;
   agentAliasId: string;
+  knowledgeBaseId: string;
+  conversationTable?: dynamodb.ITable;
 }
 
 export class APIStack extends cdk.Stack {
@@ -67,9 +70,27 @@ export class APIStack extends cdk.Stack {
         resources: [
           `arn:aws:bedrock:${region}:${props.accountId}:agent/${props.agentId}`,
           `arn:aws:bedrock:${region}:${props.accountId}:agent-alias/${props.agentId}/*`,
+          `arn:aws:bedrock:${region}:${props.accountId}:knowledge-base/${props.knowledgeBaseId}`,
         ],
       })
     );
+
+    // Grant permissions to invoke foundation models (for retrieve_and_generate)
+    apiHandlerRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'InvokeBedrockModel',
+        effect: iam.Effect.ALLOW,
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${region}::foundation-model/*`,
+        ],
+      })
+    );
+
+    // Grant DynamoDB permissions if conversation table provided
+    if (props.conversationTable) {
+      props.conversationTable.grantReadWriteData(apiHandlerRole);
+    }
 
     // ========================================
     // API HANDLER LAMBDA
@@ -88,7 +109,12 @@ export class APIStack extends cdk.Stack {
       environment: {
         AGENT_ID: props.agentId,
         AGENT_ALIAS_ID: props.agentAliasId,
+        KNOWLEDGE_BASE_ID: props.knowledgeBaseId,
+        FOUNDATION_MODEL: 'amazon.nova-pro-v1:0',
         STAGE: props.stage,
+        ENABLE_METADATA_FILTERING: 'true',
+        CONVERSATION_TABLE: props.conversationTable?.tableName || '',
+        ENABLE_SESSION_MEMORY: props.conversationTable ? 'true' : 'false',
       },
       description: 'API Gateway handler for Bedrock Agent queries',
       tracing: lambda.Tracing.ACTIVE,
@@ -126,6 +152,9 @@ export class APIStack extends cdk.Stack {
           'Authorization',
           'X-Api-Key',
           'X-Amz-Security-Token',
+          'x-tenant-id',
+          'x-user-id',
+          'x-user-roles',
         ],
       },
       endpointConfiguration: {

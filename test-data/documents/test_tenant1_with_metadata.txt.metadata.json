@@ -1,0 +1,8 @@
+{
+  "metadataAttributes": {
+    "tenant_id": "1",
+    "roles": "viewer",
+    "project_id": "100",
+    "users": "*"
+  }
+}

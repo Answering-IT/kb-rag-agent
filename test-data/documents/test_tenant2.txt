@@ -1,0 +1,21 @@
+ORGANIZACIÓN AC - INFORMACIÓN DEL TENANT 2
+
+Este documento pertenece al tenant 2 (Organización AC).
+
+Organización AC es un cliente corporativo que utiliza la plataforma ProcessApp
+para gestión de procesos pensionales.
+
+SERVICIOS CONTRATADOS:
+- Módulo de consultas
+- Reportes personalizados
+- API de integración
+- Soporte 24/7
+
+DATOS OPERATIVOS:
+- Usuarios activos: 150
+- Documentos procesados: 12,500
+- Disponibilidad (Uptime): 99.95%
+
+CONTACTO:
+Email: soporte@organizacionac.com
+Teléfono: +57 1 234 5678

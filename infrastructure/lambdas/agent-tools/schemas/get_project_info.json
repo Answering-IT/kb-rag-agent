@@ -1,0 +1,68 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Project Information API",
+    "version": "1.0.0",
+    "description": "API to retrieve project information"
+  },
+  "paths": {
+    "/getProjectInfo": {
+      "post": {
+        "summary": "Get project information",
+        "description": "Retrieves project information by organization ID and project ID",
+        "operationId": "getProjectInfo",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orgId", "projectId"],
+                "properties": {
+                  "orgId": {
+                    "type": "string",
+                    "description": "Organization ID"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "description": "Project ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string",
+                      "description": "Project ID"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Project name"
+                    },
+                    "budget": {
+                      "type": "number",
+                      "description": "Project budget"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "Project status"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
