@@ -1,0 +1,94 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Project Information API",
+    "version": "1.0.0",
+    "description": "API to retrieve project information from ECS service"
+  },
+  "paths": {
+    "/organization/{orgId}/projects/{projectId}": {
+      "get": {
+        "summary": "Get project information by ID",
+        "description": "Retrieves detailed information about a specific project including name, budget, status, users, and other metadata",
+        "operationId": "getProjectInfo",
+        "parameters": [
+          {
+            "name": "orgId",
+            "in": "path",
+            "description": "Organization ID (tenant ID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Project ID"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Project name"
+                    },
+                    "organizationId": {
+                      "type": "string",
+                      "description": "Organization (tenant) ID"
+                    },
+                    "budget": {
+                      "type": "number",
+                      "description": "Project budget amount"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "Project status (active, completed, etc.)"
+                    },
+                    "startDate": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Project start date"
+                    },
+                    "endDate": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Project end date"
+                    },
+                    "users": {
+                      "type": "array",
+                      "description": "List of users assigned to project",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  }
+}

@@ -3,9 +3,9 @@
  *
  * Creates:
  * - S3 docs bucket (source documents)
- * - S3 vectors bucket (embeddings storage)
  * - IAM roles (Bedrock KB, Lambda, Textract)
  * - CloudWatch log groups
+ * - KMS key for encryption
  */
 
 import * as cdk from 'aws-cdk-lib';
@@ -29,7 +29,7 @@ export interface PrereqsStackProps extends cdk.StackProps {
 
 export class PrereqsStack extends cdk.Stack {
   public readonly docsBucket: s3.Bucket;
-  public readonly vectorsBucket: s3.Bucket;
+  // public readonly vectorsBucket: s3.Bucket; // REMOVED (Phase 2) - not used
   public readonly bedrockKBRole: iam.Role;
   public readonly lambdaExecutionRole: iam.Role;
   public readonly textractRole: iam.Role;
@@ -114,21 +114,19 @@ export class PrereqsStack extends cdk.Stack {
       autoDeleteObjects: props.stage !== 'prod',
     });
 
-    // Vectors bucket - stores embeddings
+    // ========================================
+    // VECTORS BUCKET - REMOVED (Phase 2)
+    // ========================================
+    // This regular S3 bucket was never used. Bedrock KB creates its own
+    // AWS::S3Vectors bucket in BedrockStack. This bucket was empty and
+    // has been deleted from AWS. References will be removed in Phase 3.
+    /*
     this.vectorsBucket = new s3.Bucket(this, 'VectorsBucket', {
       bucketName: getBucketName(S3Config.vectorsBucket.prefix, props.stage, props.accountId),
-
-      // Versioning for vector history
-      versioned: false, // Vectors are regenerated, no need for versions
-
-      // Server-side encryption with KMS
+      versioned: false,
       encryption: s3.BucketEncryption.KMS,
       encryptionKey: this.kmsKey,
-
-      // Block all public access
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-
-      // Intelligent Tiering for cost optimization
       intelligentTieringConfigurations: S3Config.vectorsBucket.intelligentTiering
         ? [
             {
@@ -138,8 +136,6 @@ export class PrereqsStack extends cdk.Stack {
             },
           ]
         : undefined,
-
-      // Lifecycle rules
       lifecycleRules: [
         {
           id: 'archive-old-vectors',
@@ -157,17 +153,14 @@ export class PrereqsStack extends cdk.Stack {
           ),
         },
       ],
-
-      // Enable event notifications
       eventBridgeEnabled: true,
-
-      // Removal policy
       removalPolicy:
         props.stage === 'prod'
           ? cdk.RemovalPolicy.RETAIN
           : cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: props.stage !== 'prod',
     });
+    */
 
     // ========================================
     // IAM ROLES
@@ -248,6 +241,9 @@ export class PrereqsStack extends cdk.Stack {
       exportName: `processapp-docs-bucket-arn-${props.stage}`,
     });
 
+    // Vectors bucket outputs - REMOVED (Phase 2)
+    // Bucket deleted, outputs no longer needed
+    /*
     new cdk.CfnOutput(this, 'VectorsBucketName', {
       value: this.vectorsBucket.bucketName,
       description: 'Vectors S3 bucket name',
@@ -259,6 +255,7 @@ export class PrereqsStack extends cdk.Stack {
       description: 'Vectors S3 bucket ARN',
       exportName: `processapp-vectors-bucket-arn-${props.stage}`,
     });
+    */
 
     new cdk.CfnOutput(this, 'BedrockKBRoleArn', {
       value: this.bedrockKBRole.roleArn,

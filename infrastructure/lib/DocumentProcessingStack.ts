@@ -33,14 +33,14 @@ export interface DocumentProcessingStackProps extends cdk.StackProps {
   stage: string;
   accountId: string;
   docsBucket: s3.IBucket;
-  vectorsBucket: s3.IBucket;
+  vectorsBucket?: s3.IBucket; // REMOVED (Phase 2) - only used by Embedder (will be removed in Phase 3)
   kmsKey: kms.IKey;
 }
 
 export class DocumentProcessingStack extends cdk.Stack {
   public readonly ocrProcessor: lambda.Function;
-  public readonly embedder: lambda.Function;
-  public readonly chunksQueue: sqs.Queue;
+  // public readonly embedder: lambda.Function; // REMOVED (Phase 2) - not used
+  // public readonly chunksQueue: sqs.Queue; // REMOVED (Phase 2) - not used
 
   constructor(scope: Construct, id: string, props: DocumentProcessingStackProps) {
     super(scope, id, props);
@@ -53,9 +53,11 @@ export class DocumentProcessingStack extends cdk.Stack {
     cdk.Tags.of(this).add('Component', 'rag-document-processing');
 
     // ========================================
-    // SQS QUEUE FOR TEXT CHUNKS
+    // SQS QUEUE FOR TEXT CHUNKS - COMMENTED OUT (Phase 2)
     // ========================================
-
+    // This queue is not used - no messages are sent to it.
+    // Will be fully removed in Phase 3 when we deploy stack changes.
+    /*
     // Dead Letter Queue
     const dlq = new sqs.Queue(this, 'ChunksDLQ', {
       queueName: `processapp-chunks-dlq-${props.stage}`,
@@ -80,6 +82,7 @@ export class DocumentProcessingStack extends cdk.Stack {
         maxReceiveCount: ProcessingConfig.sqs.maxReceiveCount,
       },
     });
+    */
 
     // ========================================
     // SNS TOPIC FOR TEXTRACT NOTIFICATIONS
@@ -129,7 +132,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       inlinePolicies: {
         OCRProcessorPolicy: getLambdaOCRProcessorPolicy(
           props.docsBucket.bucketArn,
-          this.chunksQueue.queueArn,
+          undefined, // chunksQueue removed (Phase 2) - OCR doesn't send messages to SQS
           props.kmsKey.keyArn,
           region
         ),
@@ -154,7 +157,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       memorySize: ProcessingConfig.lambda.ocrProcessor.memoryMB,
       environment: {
         DOCS_BUCKET: props.docsBucket.bucketName,
-        CHUNKS_QUEUE_URL: this.chunksQueue.queueUrl,
+        // CHUNKS_QUEUE_URL: this.chunksQueue.queueUrl, // REMOVED (Phase 2) - not used
         TEXTRACT_SNS_TOPIC_ARN: textractTopic.topicArn,
         TEXTRACT_ROLE_ARN: textractRole.roleArn,
         KMS_KEY_ID: props.kmsKey.keyId,
@@ -197,9 +200,12 @@ export class DocumentProcessingStack extends cdk.Stack {
     );
 
     // ========================================
-    // EMBEDDER LAMBDA
+    // EMBEDDER LAMBDA - COMMENTED OUT (Phase 2)
     // ========================================
-
+    // This Lambda is not used - Bedrock KB handles embeddings internally.
+    // Will be fully removed in Phase 3 when we deploy stack changes.
+    // For now, we keep it commented to prevent compilation errors.
+    /*
     // IAM role
     const embedderRole = new iam.Role(this, 'EmbedderRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
@@ -253,11 +259,14 @@ export class DocumentProcessingStack extends cdk.Stack {
         reportBatchItemFailures: true,
       })
     );
+    */
 
     // ========================================
-    // EVENTBRIDGE RULE: TRIGGER KB SYNC
+    // EVENTBRIDGE RULE: TRIGGER KB SYNC - COMMENTED OUT (Phase 2)
     // ========================================
-
+    // This rule was never connected to a target and is not used.
+    // Will be fully removed in Phase 3 when we deploy stack changes.
+    /*
     // After embeddings are created, trigger KB sync
     const embeddingsCreatedRule = new events.Rule(
       this,
@@ -282,6 +291,7 @@ export class DocumentProcessingStack extends cdk.Stack {
 
     // This will be connected to KB sync function in BedrockStack
     // For now, just create the rule - target will be added later
+    */
 
     // ========================================
     // OUTPUTS
@@ -293,6 +303,8 @@ export class DocumentProcessingStack extends cdk.Stack {
       exportName: `processapp-ocr-processor-arn-${props.stage}-${region}`,
     });
 
+    // Embedder and ChunksQueue outputs - REMOVED (Phase 2)
+    /*
     new cdk.CfnOutput(this, 'EmbedderArn', {
       value: this.embedder.functionArn,
       description: 'Embedder Lambda ARN',
@@ -310,6 +322,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       description: 'Chunks SQS queue ARN',
       exportName: `processapp-chunks-queue-arn-${props.stage}-${region}`,
     });
+    */
 
     new cdk.CfnOutput(this, 'TextractTopicArn', {
       value: textractTopic.topicArn,

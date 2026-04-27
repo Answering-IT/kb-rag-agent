@@ -21,6 +21,10 @@ import { GuardrailsStack } from '../lib/GuardrailsStack';
 import { MonitoringStack } from '../lib/MonitoringStack';
 import { AgentStack } from '../lib/AgentStack';
 import { APIStack } from '../lib/APIStack';
+import { SessionMemoryStack } from '../lib/SessionMemoryStack';
+import { WebSocketStack } from '../lib/WebSocketStack';
+import { AgentStackV2 } from '../lib/AgentStackV2';
+import { WebSocketStackV2 } from '../lib/WebSocketStackV2';
 
 /**
  * Main App
@@ -37,7 +41,7 @@ SDLCAccounts.forEach((account) => {
 
     // Create PrereqsStack ONLY in GlobalResourceRegion
     if (isGlobalResourceRegion(region)) {
-      console.log(`Creating global resources in ${region} for stage ${account.stage}`);
+      // Creating global resources for this stage
 
       // Global resources (S3 buckets, IAM roles)
       const prereqsStack = new PrereqsStack(
@@ -59,7 +63,6 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           docsBucket: prereqsStack.docsBucket,
-          vectorsBucket: prereqsStack.vectorsBucket,
           bedrockKBRole: prereqsStack.bedrockKBRole,
           kmsKey: prereqsStack.kmsKey,
           env,
@@ -74,7 +77,6 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           docsBucket: prereqsStack.docsBucket,
-          vectorsBucket: prereqsStack.vectorsBucket,
           bedrockKBRole: prereqsStack.bedrockKBRole,
           kmsKey: prereqsStack.kmsKey,
           env,
@@ -89,7 +91,6 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           docsBucket: prereqsStack.docsBucket,
-          vectorsBucket: prereqsStack.vectorsBucket,
           kmsKey: prereqsStack.kmsKey,
           env,
         }
@@ -106,6 +107,15 @@ SDLCAccounts.forEach((account) => {
         }
       );
 
+      const sessionMemoryStack = new SessionMemoryStack(
+        app,
+        `${account.stage}-${region}-session-memory`,
+        {
+          stage: account.stage,
+          env,
+        }
+      );
+
       const agentStack = new AgentStack(
         app,
         `${account.stage}-${region}-agent`,
@@ -115,6 +125,7 @@ SDLCAccounts.forEach((account) => {
           knowledgeBaseId: bedrockStack.knowledgeBaseId,
           guardrailId: guardrailsStack.guardrailId,
           guardrailVersion: guardrailsStack.guardrailVersion,
+          docsBucket: prereqsStack.docsBucket,
           env,
         }
       );
@@ -129,10 +140,60 @@ SDLCAccounts.forEach((account) => {
           accountId: account.id,
           agentId: agentStack.agentId,
           agentAliasId: agentStack.agentAliasId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          conversationTable: sessionMemoryStack.conversationTable,
           env,
         }
       );
       apiStack.addDependency(agentStack);
+      apiStack.addDependency(sessionMemoryStack);
+
+      // WebSocket API for streaming responses
+      const webSocketStack = new WebSocketStack(
+        app,
+        `${account.stage}-${region}-websocket`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          agentId: agentStack.agentId,
+          agentAliasId: agentStack.agentAliasId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          conversationTableName: sessionMemoryStack.conversationTable.tableName,
+          env,
+        }
+      );
+      webSocketStack.addDependency(agentStack);
+      webSocketStack.addDependency(sessionMemoryStack);
+
+      // ========================================
+      // AGENT V2 (Agent Core Runtime with Strand SDK)
+      // ========================================
+
+      const agentStackV2 = new AgentStackV2(
+        app,
+        `${account.stage}-${region}-agent-v2`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          env,
+        }
+      );
+      agentStackV2.addDependency(bedrockStack);
+
+      // WebSocket API for Agent Core Runtime V2 (streaming)
+      const webSocketStackV2 = new WebSocketStackV2(
+        app,
+        `${account.stage}-${region}-websocket-v2`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          runtimeId: agentStackV2.runtimeId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          env,
+        }
+      );
+      webSocketStackV2.addDependency(agentStackV2);
 
       const monitoringStack = new MonitoringStack(
         app,
@@ -141,8 +202,6 @@ SDLCAccounts.forEach((account) => {
           stage: account.stage,
           accountId: account.id,
           ocrProcessor: docProcessingStack.ocrProcessor,
-          embedder: docProcessingStack.embedder,
-          chunksQueue: docProcessingStack.chunksQueue,
           knowledgeBaseId: bedrockStack.knowledgeBaseId,
           env,
         }
@@ -157,15 +216,12 @@ SDLCAccounts.forEach((account) => {
         cdk.Tags.of(bedrockStack).add(key, value);
         cdk.Tags.of(docProcessingStack).add(key, value);
         cdk.Tags.of(guardrailsStack).add(key, value);
+        cdk.Tags.of(sessionMemoryStack).add(key, value);
         cdk.Tags.of(agentStack).add(key, value);
         cdk.Tags.of(apiStack).add(key, value);
+        cdk.Tags.of(webSocketStack).add(key, value);
         cdk.Tags.of(monitoringStack).add(key, value);
       });
-    } else {
-      console.log(`Skipping ${region} - not the global resource region`);
-      console.warn(
-        `Multi-region deployment not fully implemented. Deploy to ${GlobalResourceRegion} first.`
-      );
     }
   });
 });

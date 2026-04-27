@@ -55,9 +55,18 @@ export class GuardrailsStack extends cdk.Stack {
     });
 
     // ========================================
-    // GUARDRAIL CUSTOM RESOURCE LAMBDA
+    // GUARDRAIL - USING EXISTING (Phase 3)
     // ========================================
+    // Guardrail was already created during initial deployment.
+    // Custom resource Lambda deleted in Phase 1 - no longer needed.
+    // Using hardcoded ID and ARN from existing guardrail in AWS.
 
+    // Existing guardrail: processapp-pii-filter-dev
+    this.guardrailId = 'vqmee7t84ymc';
+    this.guardrailArn = `arn:aws:bedrock:${region}:${props.accountId}:guardrail/${this.guardrailId}`;
+
+    /*
+    // REMOVED: Custom resource Lambda (guardrail-creator folder deleted in Phase 1)
     const guardrailCreatorFunction = new lambda.Function(
       this,
       'GuardrailCreatorFunction',
@@ -78,10 +87,6 @@ export class GuardrailsStack extends cdk.Stack {
       }
     );
 
-    // ========================================
-    // CREATE GUARDRAIL (Custom Resource)
-    // ========================================
-
     const guardrailConfig = getGuardrailConfig();
 
     const guardrailProvider = new cr.Provider(this, 'GuardrailProvider', {
@@ -95,30 +100,28 @@ export class GuardrailsStack extends cdk.Stack {
         Description: guardrailConfig.description,
         BlockedInputMessaging: guardrailConfig.blockedInputMessaging,
         BlockedOutputsMessaging: guardrailConfig.blockedOutputMessaging,
-
-        // Content filters
         ContentPolicyConfig: guardrailConfig.contentPolicyConfig,
-
-        // PII detection
         SensitiveInformationPolicyConfig:
           guardrailConfig.sensitiveInformationPolicyConfig,
-
-        // Topic blocking
         TopicPolicyConfig: guardrailConfig.topicPolicyConfig,
-
-        // Word filters (optional)
         WordPolicyConfig: guardrailConfig.wordPolicyConfig || {},
       },
     });
 
     this.guardrailId = guardrail.getAttString('GuardrailId');
     this.guardrailArn = guardrail.getAttString('GuardrailArn');
+    */
 
     // ========================================
-    // CREATE GUARDRAIL VERSION
+    // GUARDRAIL VERSION - USING EXISTING (Phase 3)
     // ========================================
+    // Version was already created during initial deployment.
+    // Using hardcoded version "1" from existing guardrail in AWS.
 
-    // Guardrails require a version to be used
+    this.guardrailVersion = '1';
+
+    /*
+    // REMOVED: Version creation Lambda (no longer needed)
     const versionFunction = new lambda.Function(this, 'GuardrailVersionFunction', {
       functionName: `processapp-guardrail-version-${props.stage}`,
       runtime: lambda.Runtime.PYTHON_3_11,
@@ -135,15 +138,12 @@ def handler(event, context):
 
     if request_type == 'Create' or request_type == 'Update':
         try:
-            # Create a version of the guardrail
             response = bedrock.create_guardrail_version(
                 guardrailIdentifier=guardrail_id,
                 description=f'Version created for {context.function_name}'
             )
-
             version = response['version']
             print(f'Created guardrail version: {version}')
-
             return {
                 'PhysicalResourceId': f'{guardrail_id}-v{version}',
                 'Data': {
@@ -154,9 +154,7 @@ def handler(event, context):
         except Exception as e:
             print(f'Error creating version: {str(e)}')
             raise
-
     elif request_type == 'Delete':
-        # No action needed on delete
         return {
             'PhysicalResourceId': event['PhysicalResourceId']
         }
@@ -180,6 +178,7 @@ def handler(event, context):
     guardrailVersion.node.addDependency(guardrail);
 
     this.guardrailVersion = guardrailVersion.getAttString('Version');
+    */
 
     // ========================================
     // OUTPUTS

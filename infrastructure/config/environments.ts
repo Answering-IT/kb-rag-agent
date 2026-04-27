@@ -375,3 +375,44 @@ export function getCostAllocationTags(stage: string, additionalTags?: Record<str
     ...additionalTags,
   };
 }
+
+/**
+ * Multi-Tenant Configuration
+ */
+export const MultiTenantConfig = {
+  enableMetadataFiltering: true,
+  filteringOrder: ['tenantId', 'roles', 'projectId', 'users'],
+  denyByDefault: true,
+  headerNames: {
+    tenantId: 'X-Tenant-Id',
+    userId: 'X-User-Id',
+    userRoles: 'X-User-Roles',
+  },
+  sessionMemoryTtlDays: 90,
+  metadataSource: 's3-metadata', // Read metadata from S3 object metadata (x-amz-meta-*)
+};
+
+/**
+ * Agent Tools Configuration
+ */
+export const AgentToolsConfig = {
+  tools: [
+    {
+      name: 'GetProjectInfo',
+      type: 'HTTP',
+      baseUrl: 'https://dev.app.colpensiones.procesapp.com',
+      endpoint: 'GET /organization/{orgId}/projects/{projectId}',
+      description: 'Retrieve project information',
+      enabled: true,
+    },
+  ],
+};
+
+/**
+ * Streaming Configuration
+ */
+export const StreamingConfig = {
+  enabled: false, // Enable in future iteration
+  type: 'websocket',
+  chunkTimeoutMs: 100,
+};

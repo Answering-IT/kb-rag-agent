@@ -23,7 +23,7 @@ export interface BedrockStackProps extends cdk.StackProps {
   stage: string;
   accountId: string;
   docsBucket: s3.IBucket;
-  vectorsBucket: s3.IBucket;
+  vectorsBucket?: s3.IBucket; // REMOVED (Phase 2) - BedrockStack creates own AWS::S3Vectors bucket
   bedrockKBRole: iam.IRole;
   kmsKey: kms.IKey;
 }

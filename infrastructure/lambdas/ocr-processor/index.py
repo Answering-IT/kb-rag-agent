@@ -80,7 +80,11 @@ def handle_s3_upload(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         elif file_ext in ['txt', 'docx', 'md']:
             # Text files don't need OCR processing - Bedrock KB can read them directly
+            # But we should generate metadata.json if source has metadata
             print(f'Text file detected, no OCR needed: {object_key}')
+
+            # Generate metadata.json companion file if source has tenant metadata
+            generate_metadata_json_for_text_file(bucket_name, object_key)
 
             return {
                 'statusCode': 200,
@@ -200,6 +204,7 @@ def get_textract_results(job_id: str) -> str:
 def save_processed_text_to_s3(original_key: str, text: str) -> str:
     """
     Save processed text to S3 for Bedrock KB to read
+    Also creates companion metadata.json file from source document metadata
 
     Writes OCR-extracted text directly to documents/processed/ prefix
     where Bedrock KB can discover and index it.
@@ -220,7 +225,16 @@ def save_processed_text_to_s3(original_key: str, text: str) -> str:
     processed_key = f'documents/processed-{base_name}.txt'
 
     try:
-        # Prepare put_object parameters
+        # Read source document metadata
+        source_metadata = {}
+        try:
+            head_response = s3.head_object(Bucket=DOCS_BUCKET, Key=original_key)
+            source_metadata = head_response.get('Metadata', {})
+            print(f'Source metadata: {source_metadata}')
+        except Exception as e:
+            print(f'Warning: Could not read source metadata: {e}')
+
+        # Prepare put_object parameters for processed text
         put_params = {
             'Bucket': DOCS_BUCKET,
             'Key': processed_key,
@@ -239,13 +253,134 @@ def save_processed_text_to_s3(original_key: str, text: str) -> str:
             put_params['ServerSideEncryption'] = 'aws:kms'
             put_params['SSEKMSKeyId'] = KMS_KEY_ID
 
+        # Save processed text
         s3.put_object(**put_params)
         print(f'Saved processed text to: {processed_key}')
+
+        # Create companion metadata.json file for Bedrock KB
+        # Bedrock KB requires metadata in a separate .metadata.json file
+        if source_metadata:
+            metadata_json_key = f'{processed_key}.metadata.json'
+
+            # Build metadataAttributes from source metadata
+            # Extract tenant-specific metadata (tenant_id, roles, project_id, users)
+            metadata_attributes = {}
+
+            # Map common metadata keys to Bedrock format
+            metadata_mapping = {
+                'tenant_id': source_metadata.get('tenant_id'),
+                'tenantid': source_metadata.get('tenantid'),
+                'roles': source_metadata.get('roles'),
+                'project_id': source_metadata.get('project_id'),
+                'projectid': source_metadata.get('projectid'),
+                'users': source_metadata.get('users'),
+            }
+
+            # Add non-None values to metadata_attributes
+            for key, value in metadata_mapping.items():
+                if value:
+                    # Normalize to snake_case
+                    normalized_key = key.replace('tenantid', 'tenant_id').replace('projectid', 'project_id')
+                    metadata_attributes[normalized_key] = value
+
+            if metadata_attributes:
+                # Create metadata.json with metadataAttributes wrapper
+                metadata_json = {
+                    'metadataAttributes': metadata_attributes
+                }
+
+                metadata_put_params = {
+                    'Bucket': DOCS_BUCKET,
+                    'Key': metadata_json_key,
+                    'Body': json.dumps(metadata_json, indent=2).encode('utf-8'),
+                    'ContentType': 'application/json'
+                }
+
+                if KMS_KEY_ID:
+                    metadata_put_params['ServerSideEncryption'] = 'aws:kms'
+                    metadata_put_params['SSEKMSKeyId'] = KMS_KEY_ID
+
+                s3.put_object(**metadata_put_params)
+                print(f'Created metadata.json: {metadata_json_key}')
+                print(f'Metadata content: {metadata_json}')
+            else:
+                print(f'Warning: No tenant metadata found in source document, skipping metadata.json creation')
+
         return processed_key
 
     except Exception as e:
         print(f'Error saving processed text to S3: {str(e)}')
         raise
+
+
+def generate_metadata_json_for_text_file(bucket_name: str, object_key: str):
+    """
+    Generate companion metadata.json file for text files that don't need OCR
+
+    Reads S3 object metadata from source file and creates .metadata.json
+    companion file required by Bedrock Knowledge Base.
+
+    Args:
+        bucket_name: S3 bucket name
+        object_key: S3 object key (e.g., "documents/file.txt")
+    """
+    try:
+        # Read source document metadata
+        head_response = s3.head_object(Bucket=bucket_name, Key=object_key)
+        source_metadata = head_response.get('Metadata', {})
+
+        if not source_metadata:
+            print(f'No metadata found for {object_key}, skipping metadata.json creation')
+            return
+
+        print(f'Source metadata for {object_key}: {source_metadata}')
+
+        # Build metadataAttributes from source metadata
+        metadata_attributes = {}
+
+        # Map common metadata keys to Bedrock format (snake_case)
+        metadata_mapping = {
+            'tenant_id': source_metadata.get('tenant_id') or source_metadata.get('tenantid'),
+            'roles': source_metadata.get('roles'),
+            'project_id': source_metadata.get('project_id') or source_metadata.get('projectid'),
+            'users': source_metadata.get('users'),
+        }
+
+        # Add non-None values to metadata_attributes
+        for key, value in metadata_mapping.items():
+            if value:
+                metadata_attributes[key] = value
+
+        if not metadata_attributes:
+            print(f'No tenant metadata found for {object_key}, skipping metadata.json creation')
+            return
+
+        # Create metadata.json companion file
+        metadata_json_key = f'{object_key}.metadata.json'
+
+        metadata_json = {
+            'metadataAttributes': metadata_attributes
+        }
+
+        put_params = {
+            'Bucket': bucket_name,
+            'Key': metadata_json_key,
+            'Body': json.dumps(metadata_json, indent=2).encode('utf-8'),
+            'ContentType': 'application/json'
+        }
+
+        # Add KMS encryption if available
+        if KMS_KEY_ID:
+            put_params['ServerSideEncryption'] = 'aws:kms'
+            put_params['SSEKMSKeyId'] = KMS_KEY_ID
+
+        s3.put_object(**put_params)
+        print(f'✅ Created metadata.json: {metadata_json_key}')
+        print(f'   Content: {metadata_json}')
+
+    except Exception as e:
+        print(f'Error generating metadata.json for {object_key}: {str(e)}')
+        # Don't raise - this is non-critical, the document can still be indexed
 
 
 # NOTE: Chunking and embedding are now handled entirely by Bedrock Knowledge Base

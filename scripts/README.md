@@ -1,201 +1,128 @@
-# Test Scripts
+# ProcessApp RAG Agent - Test Scripts
 
-This directory contains all test and utility scripts for the ProcessApp RAG system.
-
-## 🧪 Test Scripts
-
-### test-api.py
-**Purpose:** Test the API Gateway endpoint
-
-**Usage:**
-```bash
-export API_KEY="your-api-key"
-python3 scripts/test-api.py
-```
-
-**Tests:**
-- ✅ Simple query
-- ✅ Follow-up question (session continuity)
-- ✅ OCR document query
-- ✅ Company data query
-- ✅ PII filter test (guardrails)
-
-**Requirements:**
-- API key configured in environment variable
-- `requests` library installed
+Essential scripts for testing the RAG agent infrastructure.
 
 ---
 
-### test-agent.py
-**Purpose:** Test Bedrock Agent directly via AWS SDK
+## Testing Scripts
 
-**Usage:**
-```bash
-export AWS_PROFILE=default
-python3 scripts/test-agent.py
-```
+### Agent V2 (Agent Core Runtime with Strand SDK)
 
-**Tests:**
-- Direct agent invocation using boto3
-- Session management
-- Response streaming
+**`test-tools.py`** - Comprehensive E2E test for Agent V2
+- ✅ Tests Knowledge Base search tool
+- ✅ Tests Project Info tool (ECS service integration)
+- ✅ Tests Memory (conversation context across sessions)
+- **Usage:** `python3 test-tools.py`
+- **WebSocket:** Connects to `wss://.../dev` endpoint
 
-**Requirements:**
-- AWS credentials configured
-- `boto3` library installed
-- IAM permissions to invoke Bedrock Agent
+**`quick-ws-test.py`** - Quick WebSocket connection test
+- ✅ Simple test to verify WebSocket connectivity
+- ✅ Tests single Knowledge Base query
+- **Usage:** `python3 quick-ws-test.py`
 
----
+### Agent V1 (Bedrock Agent)
 
-### test-ocr-agent.py
-**Purpose:** Test the OCR flow end-to-end
+**`test-agent.py`** - Test Agent V1 via AWS SDK
+- ✅ Tests Bedrock Agent directly (no API Gateway)
+- ✅ Uses AWS credentials from profile
+- **Usage:** `python3 test-agent.py`
+- **Requirements:** AWS profile `default` configured
 
-**Usage:**
-```bash
-export AWS_PROFILE=default
-python3 scripts/test-ocr-agent.py
-```
+**`test-api.py`** - Test Agent V1 via REST API
+- ✅ Tests API Gateway endpoint
+- ✅ Requires API key
+- **Usage:** `python3 test-api.py`
 
-**What it tests:**
-1. Upload image/PDF to S3
-2. OCR Lambda triggers
-3. Textract extracts text
-4. Processed text saved to S3
-5. KB sync
-6. Query agent about OCR document
+### Document Processing
 
-**Requirements:**
-- AWS credentials configured
-- `boto3`, `Pillow` libraries installed
-- S3 bucket name and KMS key ID configured
+**`test-ocr-agent.py`** - Test OCR Lambda function
+- ✅ Tests document processing pipeline
+- ✅ Verifies Textract integration
+- **Usage:** `python3 test-ocr-agent.py`
+
+**`create-ocr-image.py`** - Generate test images for OCR
+- ✅ Creates synthetic documents for testing
+- **Usage:** `python3 create-ocr-image.py`
 
 ---
 
-### test-dos-flujos.py
-**Purpose:** Test both document flows (OCR and direct)
+## Running Tests
 
-**Usage:**
+### E2E Test Suite (Recommended)
+
+**Run all E2E tests:**
 ```bash
-export AWS_PROFILE=default
-python3 scripts/test-dos-flujos.py
+# Run all tests (ingestion + agents)
+./run-e2e-tests.sh
+
+# Run all tests including KB
+./run-e2e-tests.sh --all
+
+# Run specific component
+./run-e2e-tests.sh --agent-v2
+./run-e2e-tests.sh --agent-v1
+./run-e2e-tests.sh --ingestion
+
+# Options
+./run-e2e-tests.sh --all -v      # Verbose output
+./run-e2e-tests.sh -x            # Stop on first failure
+./run-e2e-tests.sh --help        # Show help
 ```
 
-**What it tests:**
-1. **Direct flow:** Upload text document → KB sync → Query
-2. **OCR flow:** Upload image → OCR → KB sync → Query
+### Quick Tests (Individual Scripts)
 
-**Requirements:**
-- AWS credentials configured
-- `boto3` library installed
-- Test documents available
+**Quick Test (V2 Agent with all features):**
+```bash
+python3 test-tools.py
+```
+
+**Individual Component Tests:**
+```bash
+# Knowledge Base only (V2)
+python3 quick-ws-test.py
+
+# Agent V1 (Bedrock Agent)
+python3 test-agent.py
+
+# REST API (V1)
+python3 test-api.py
+
+# Document processing
+python3 test-ocr-agent.py
+```
 
 ---
 
-### create-ocr-image.py
-**Purpose:** Generate test images with text for OCR testing
+## Configuration
 
-**Usage:**
-```bash
-python3 scripts/create-ocr-image.py
+All scripts use environment variables or AWS profiles for configuration:
+- **AWS Profile:** `default` (or set `AWS_PROFILE`)
+- **Region:** `us-east-1`
+- **Account:** `708819485463`
+
+WebSocket URL is hardcoded in test scripts (update if needed):
+```python
+# In test-tools.py and quick-ws-test.py
+host = "1j1xzo7n4h.execute-api.us-east-1.amazonaws.com"
+path = "/dev"
 ```
-
-**Output:**
-- PNG image with embedded text
-- Useful for testing OCR Lambda
-- Can customize text content
-
-**Requirements:**
-- `Pillow` library installed
 
 ---
 
-## 📦 Installation
+## Troubleshooting
 
-Install required dependencies:
+### WebSocket connection fails
+- Check deployment status: `npx cdk deploy dev-us-east-1-websocket-v2`
+- Check Lambda logs: `aws logs tail /aws/lambda/processapp-ws-message-v2-dev --follow`
 
-```bash
-# Using pip
-pip install boto3 requests Pillow
+### Agent doesn't respond
+- Check runtime health: `aws logs tail /aws/bedrock-agentcore/runtimes/processapp_agent_runtime_v2_dev-*`
+- Verify Knowledge Base ID in agent environment variables
 
-# Or using requirements.txt
-pip install -r requirements.txt
-```
-
-## 🔑 Configuration
-
-### For API Tests
-```bash
-export API_KEY="your-api-key"
-```
-
-### For Direct AWS Tests
-```bash
-export AWS_PROFILE=default
-# Or
-export AWS_ACCESS_KEY_ID="your-key"
-export AWS_SECRET_ACCESS_KEY="your-secret"
-```
-
-## 🚀 Quick Start
-
-**1. Test API Gateway (easiest):**
-```bash
-export API_KEY="your-api-key"
-python3 scripts/test-api.py
-```
-
-**2. Test complete OCR flow:**
-```bash
-export AWS_PROFILE=default
-python3 scripts/test-ocr-agent.py
-```
-
-**3. Test both flows:**
-```bash
-export AWS_PROFILE=default
-python3 scripts/test-dos-flujos.py
-```
-
-## 📊 Test Output
-
-All test scripts provide detailed output:
-- ✅ Success indicators
-- ❌ Error messages with context
-- ⏱️ Timing information
-- 📝 Response content
-
-## 🐛 Troubleshooting
-
-### API Key Issues
-```bash
-# Verify API key is set
-echo $API_KEY
-
-# Get API key value
-aws apigateway get-api-key --api-key 6a0h023lec --include-value --query 'value' --output text
-```
-
-### AWS Credentials Issues
-```bash
-# Verify AWS credentials
-aws sts get-caller-identity
-
-# List available profiles
-aws configure list-profiles
-```
-
-### Import Errors
-```bash
-# Install missing dependencies
-pip install boto3 requests Pillow
-```
-
-## 📚 Documentation
-
-- **Main README:** [../README.md](../README.md)
-- **API Documentation:** [../docs/API_USAGE.md](../docs/API_USAGE.md)
-- **Testing Guide:** [../docs/TESTING_GUIDE.md](../docs/TESTING_GUIDE.md)
+### Knowledge Base returns no results
+- Run ingestion job: `aws bedrock-agent start-ingestion-job --knowledge-base-id <KB_ID> --data-source-id <DS_ID>`
+- Check documents in S3: `aws s3 ls s3://processapp-docs-v2-dev-708819485463/documents/`
 
 ---
 
-**Last Updated:** 2026-04-21
+**Last Updated:** 2026-04-26
