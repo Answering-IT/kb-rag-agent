@@ -1,0 +1,44 @@
+{
+  "test_date": "2026-04-26T10:58:00.579477",
+  "configuration": {
+    "bucket": "processapp-docs-v2-dev-708819485463",
+    "kb_id": "R80HXGRLHO",
+    "ds_id": "6H96SSTEHT",
+    "api_url": "https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query",
+    "region": "us-east-1"
+  },
+  "documents_uploaded": 4,
+  "test_cases": 6,
+  "results": [
+    {
+      "test": "Tenant 1 - Viewer role - General info",
+      "status": "SUCCESS",
+      "answer": "Sorry, I am unable to assist you with this request."
+    },
+    {
+      "test": "Tenant 1 - Supervisor role - Confidential project info",
+      "status": "SUCCESS",
+      "answer": "Sorry, I am unable to assist you with this request."
+    },
+    {
+      "test": "Tenant 1 - Viewer role - Try to access supervisor-only doc",
+      "status": "SUCCESS",
+      "answer": "Sorry, I am unable to assist you with this request."
+    },
+    {
+      "test": "Tenant 1 - Specific user (user123)",
+      "status": "SUCCESS",
+      "answer": "Sorry, I am unable to assist you with this request."
+    },
+    {
+      "test": "Tenant 2 - Try to access Tenant 1 data",
+      "status": "SUCCESS",
+      "answer": "Sorry, I am unable to assist you with this request."
+    },
+    {
+      "test": "Tenant 2 - Access own data",
+      "status": "SUCCESS",
+      "answer": "Sorry, I am unable to assist you with this request."
+    }
+  ]
+}

@@ -71,7 +71,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         print(f"Fetching project info - orgId: {org_id}, projectId: {project_id}")
 
-        # Build full URL
+        # Build full URL to ECS service
         url = f"{ECS_BASE_URL}/organization/{org_id}/projects/{project_id}"
 
         print(f"Calling ECS endpoint: {url}")

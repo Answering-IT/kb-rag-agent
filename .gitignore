@@ -1,1 +1,48 @@
+# Test reports
 scripts/test-report-*.json
+
+# Dependencies
+node_modules/
+agents/*/node_modules/
+infrastructure/node_modules/
+
+# Build outputs
+dist/
+build/
+*.js.map
+agents/*/dist/
+infrastructure/lib/*.js
+infrastructure/bin/*.js
+
+# CDK outputs
+cdk.out/
+.cdk.staging/
+*.d.ts
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# AWS
+.aws-sam/
+
+# Temporary files
+*.tmp
+.cache/
+.temp/
