@@ -2,16 +2,17 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { Send, Bot, User, WifiOff } from 'lucide-react';
-import { useWebSocketChat } from '@/hooks/useWebSocketChat';
+import { useStreamingChat, StreamingChatConfig } from '@/hooks/useStreamingChat';
 import { MarkdownMessage } from './markdown-message';
 
 interface ChatProps {
   className?: string;
   placeholder?: string;
+  config?: StreamingChatConfig;
 }
 
-export function Chat({ className = '', placeholder = 'Ask me anything...' }: ChatProps) {
-  const { messages, isLoading, isConnected, sendMessage } = useWebSocketChat();
+export function Chat({ className = '', placeholder = 'Ask me anything...', config }: ChatProps) {
+  const { messages, isLoading, isConnected, sendMessage } = useStreamingChat(config);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
