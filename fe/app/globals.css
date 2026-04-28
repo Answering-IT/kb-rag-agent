@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* Tokyo Night Theme - Tailwind v4 Compatible */
+@theme {
+  /* Light mode colors */
+  --color-background: #f5f5f5;
+  --color-background-secondary: #ffffff;
+  --color-foreground: #192330;
+  --color-foreground-secondary: #666666;
+
+  /* Tokyo Night Accent Colors */
+  --color-accent-primary: #7aa2f7;
+  --color-accent-secondary: #bb9af7;
+  --color-accent-tertiary: #7dcfff;
+  --color-accent-success: #9ece6a;
+  --color-accent-warning: #e0af68;
+  --color-accent-danger: #f7768e;
+
+  /* Borders */
+  --color-border-light: #e5e7eb;
+  --color-border-dark: #2f3f56;
+
+  /* Fonts */
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-background: #1a1b26;
+    --color-background-secondary: #24283b;
+    --color-foreground: #c0caf5;
+    --color-foreground-secondary: #9ca3af;
+    --color-border-light: #414868;
+    --color-border-dark: #2f3f56;
+  }
+}
+
+/* Base styles */
+html, body {
+  height: 100%;
+  background-color: #f5f5f5;
+  color: #192330;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body {
+    background-color: #1a1b26;
+    color: #c0caf5;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7aa2f7;
+}
+
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb {
+    background: #2f3f56;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #7dcfff;
+  }
+}
+
+/* Selection styles */
+::selection {
+  background: #7aa2f7;
+  color: white;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
