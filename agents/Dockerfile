@@ -8,8 +8,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy agent code
+# Copy agent code and normative framework
 COPY main.py .
+COPY marco_normativo_colpensiones.md .
 
 # Expose port 8080 (required by Agent Core Runtime)
 EXPOSE 8080

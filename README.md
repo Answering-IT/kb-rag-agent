@@ -2,11 +2,81 @@
 
 Multi-tenant RAG (Retrieval-Augmented Generation) infrastructure using AWS Bedrock, S3 Vector storage, and serverless document processing.
 
+## ⚡ Quick Deploy
+
+```bash
+# Set AWS profile
+export AWS_PROFILE=ans-super
+
+# Compile and deploy Agent V2
+cd infrastructure
+npm install && npm run build
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never
+```
+
+**Agent V2** - Normative Consultant specialized in Colombian pension regulations using Strand SDK.
+
+---
+
+## 📌 Common Commands
+
+| Task | Command |
+|------|---------|
+| **Compile** | `cd infrastructure && npm run build` |
+| **Deploy Agent V2** | `cd infrastructure && npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never` |
+| **Check compilation** | `cd infrastructure && npm run build` (no errors = success) |
+| **View logs** | `aws logs tail /aws/bedrock/agentcore/runtime/processapp_agent_runtime_v2_dev --follow --profile ans-super` |
+| **Get outputs** | `aws cloudformation describe-stacks --stack-name dev-us-east-1-agent-v2 --query 'Stacks[0].Outputs' --profile ans-super` |
+| **Verify AWS profile** | `aws sts get-caller-identity --profile ans-super` |
+
+---
+
 ## 🚀 Quick Start
 
-### For Backend Developers - Use the REST API
+### Agent V2 - Normative Consultant (Recommended)
 
-The fastest way to query the RAG system is via our REST API endpoint:
+**Agent V2** is a custom agent specialized in Colombian pension regulations using Strand SDK.
+
+#### Deploy Agent V2
+
+```bash
+# 1. Set AWS profile
+export AWS_PROFILE=ans-super
+
+# 2. Compile and deploy
+cd infrastructure
+npm install && npm run build
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never
+```
+
+#### What Agent V2 Does
+
+- 📚 **Consults Colpensiones regulations** - Laws, decrees, circulars, jurisprudence
+- 🌐 **Fetches official sources** - funcionpublica.gov.co, presidencia.gov.co, etc.
+- 💬 **Conversation memory** - Maintains context across questions
+- 🔍 **Smart search** - Uses normative framework index to find relevant documents
+
+**Example Questions:**
+```
+- "¿Qué es la Ley 2381 de 2024?"
+- "¿Dónde puedo consultar el Decreto 1225 de 2024?"
+- "¿Cuál es el marco normativo de la reforma pensional?"
+```
+
+**Stack Outputs:**
+```bash
+# Get runtime endpoint
+aws cloudformation describe-stacks \
+  --stack-name dev-us-east-1-agent-v2 \
+  --query 'Stacks[0].Outputs' \
+  --profile ans-super
+```
+
+---
+
+### Agent V1 (Legacy) - REST API
+
+The original agent using Bedrock Agent service with REST API.
 
 **API Endpoint:** `https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query`
 
@@ -38,7 +108,7 @@ curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
 
 #### Prerequisites
 
-- AWS CLI configured with credentials
+- AWS CLI configured with credentials (`ans-super` profile)
 - AWS CDK installed (`npm install -g aws-cdk`)
 - Node.js 18+
 - Python 3.11+
@@ -511,14 +581,33 @@ The test script includes:
 ## 🏗️ Infrastructure
 
 ### Deployed Stacks
+
+#### Core Infrastructure (Shared)
 1. **PrereqsStack** - S3 buckets, KMS keys, IAM roles
 2. **SecurityStack** - Bucket policies, guardrails permissions
 3. **BedrockStack** - Knowledge Base, Data Source, Vector Index
 4. **DocumentProcessingStack** - OCR Lambda, Textract, SNS
 5. **GuardrailsStack** - Content filters and PII protection
-6. **AgentStack** - Bedrock Agent with Nova Pro model
-7. **APIStack** - API Gateway REST endpoint with Lambda handler
-8. **MonitoringStack** - CloudWatch dashboards and alarms
+6. **SessionMemoryStack** - DynamoDB for conversation history
+7. **MonitoringStack** - CloudWatch dashboards and alarms
+
+#### Agent V1 (Legacy)
+8. **AgentStack** - Bedrock Agent with Nova Pro model
+9. **APIStack** - API Gateway REST endpoint with Lambda handler
+10. **WebSocketStack** - WebSocket API for streaming
+
+#### Agent V2 (Active) 🆕
+11. **AgentStackV2** - Agent Core Runtime with Strand SDK
+12. **WebSocketStackV2** - WebSocket API for Agent V2 streaming
+
+**Deploy Commands:**
+```bash
+# Deploy Agent V2 only (recommended for updates)
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never
+
+# Deploy all stacks (full infrastructure)
+npx cdk deploy --all --profile ans-super --require-approval never
+```
 
 ### Key Configuration
 
@@ -597,7 +686,144 @@ python3 scripts/test-dos-flujos.py
 
 ## 🔧 Development
 
-### Deploy Infrastructure
+### Agent V2 - Normative Consultant (Strand SDK)
+
+**Agent V2** uses Strand SDK and Agent Core Runtime for custom agent logic with web search capabilities.
+
+#### Quick Deploy
+
+```bash
+# 1. Set AWS profile (IMPORTANT: use ans-super for this project)
+export AWS_PROFILE=ans-super
+
+# 2. Compile Infrastructure
+cd infrastructure
+npm install
+npm run build
+
+# 3. Deploy Agent V2 Stack
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never
+```
+
+#### Development Workflow
+
+```bash
+# 1. Edit agent code
+cd agents
+vim main.py
+
+# 2. Test agent locally (optional)
+python3 main.py
+# Access: http://localhost:8080/health
+
+# 3. Compile and verify TypeScript
+cd ../infrastructure
+npm run build
+
+# 4. Check for compilation errors
+# If no errors, proceed to deploy
+
+# 5. Deploy updated agent
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never
+```
+
+#### Agent V2 Features
+
+**Active Tools:**
+- ✅ `consult_normative_document` - Consulta marco normativo de Colpensiones
+- ✅ `http_request` (Strands) - Fetch de URLs oficiales del gobierno
+
+**Disabled Tools:**
+- ❌ `search_knowledge_base` - Disabled (can be re-enabled)
+- ❌ `get_project_info` - Disabled (can be re-enabled)
+
+**Stack Resources:**
+- **Agent Runtime** - FastAPI server with Strand SDK
+- **Agent Memory** - 7-day conversation history
+- **Runtime Endpoint** - HTTPS endpoint for invocation
+- **Normative Framework** - Loaded from `agents/marco_normativo_colpensiones.md`
+
+#### Agent Configuration Files
+
+```
+agents/
+├── main.py                           # Agent code (Strand SDK)
+├── marco_normativo_colpensiones.md   # Normative framework index
+├── requirements.txt                  # Python dependencies
+└── Dockerfile                        # Container definition (auto-built by CDK)
+```
+
+#### Quick Verification Commands
+
+```bash
+# Check stack status
+aws cloudformation describe-stacks \
+  --stack-name dev-us-east-1-agent-v2 \
+  --query 'Stacks[0].StackStatus' \
+  --profile ans-super
+
+# Get runtime endpoint
+aws cloudformation describe-stacks \
+  --stack-name dev-us-east-1-agent-v2 \
+  --query 'Stacks[0].Outputs[?OutputKey==`RuntimeEndpointUrlV2`].OutputValue' \
+  --output text \
+  --profile ans-super
+
+# Check agent runtime logs
+aws logs tail /aws/bedrock/agentcore/runtime/processapp_agent_runtime_v2_dev --follow --profile ans-super
+```
+
+#### Deployment Outputs
+
+After successful deployment, you'll see:
+
+```
+✅  dev-us-east-1-agent-v2
+
+Outputs:
+dev-us-east-1-agent-v2.RuntimeIdV2 = processapp_agent_runtime_v2_dev-XXXXX
+dev-us-east-1-agent-v2.RuntimeEndpointUrlV2 = https://processapp_endpoint_v2_dev...
+dev-us-east-1-agent-v2.MemoryIdV2 = processapp_agent_memory_v2_dev-XXXXX
+```
+
+#### Troubleshooting Deployment
+
+**Issue: Compilation errors**
+```bash
+# Check TypeScript errors
+cd infrastructure
+npm run build
+# Fix errors in lib/AgentStackV2.ts or bin/app.ts
+```
+
+**Issue: Docker build fails**
+```bash
+# Check agent dependencies
+cd agents
+pip install -r requirements.txt
+# Ensure all imports work
+python3 -c "import strands; import strands_tools; print('OK')"
+```
+
+**Issue: Deployment fails**
+```bash
+# Check CDK logs
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --verbose
+
+# View CloudFormation events
+aws cloudformation describe-stack-events \
+  --stack-name dev-us-east-1-agent-v2 \
+  --max-items 20 \
+  --profile ans-super
+```
+
+---
+
+### Agent V1 (Legacy) - Bedrock Agent
+
+The original agent using Bedrock Agent service.
+
+#### Deploy Infrastructure
 
 ```bash
 cd infrastructure
@@ -605,10 +831,10 @@ npm install
 npm run build
 
 # Deploy all stacks
-npx cdk deploy --all --profile default --require-approval never
+npx cdk deploy --all --profile ans-super --require-approval never
 
 # Deploy specific stack
-npx cdk deploy dev-us-east-1-bedrock --profile default
+npx cdk deploy dev-us-east-1-agent --profile ans-super
 ```
 
 ### Configuration
@@ -627,6 +853,11 @@ Edit `infrastructure/config/environments.ts` to configure:
 
 ```
 kb-rag-agent/
+├── agents/                           # 🆕 Agent V2 Code (Strand SDK)
+│   ├── main.py                       # Agent implementation
+│   ├── marco_normativo_colpensiones.md # Normative framework index
+│   ├── requirements.txt              # Python dependencies
+│   └── Dockerfile                    # Container definition
 ├── infrastructure/
 │   ├── bin/
 │   │   └── app.ts                    # CDK app entry point
@@ -636,8 +867,11 @@ kb-rag-agent/
 │   │   ├── BedrockStack.ts           # Knowledge Base
 │   │   ├── DocumentProcessingStack.ts # OCR Lambda
 │   │   ├── GuardrailsStack.ts        # Content filters
-│   │   ├── AgentStack.ts             # Bedrock Agent
+│   │   ├── AgentStack.ts             # Bedrock Agent (V1 - Legacy)
+│   │   ├── AgentStackV2.ts           # 🆕 Agent Core Runtime (V2)
 │   │   ├── APIStack.ts               # API Gateway
+│   │   ├── WebSocketStack.ts         # WebSocket API (V1)
+│   │   ├── WebSocketStackV2.ts       # 🆕 WebSocket API (V2)
 │   │   └── MonitoringStack.ts        # CloudWatch
 │   ├── lambdas/
 │   │   ├── ocr-processor/            # Textract integration
@@ -656,10 +890,12 @@ kb-rag-agent/
 │   └── LAMBDA_INVENTORY.md           # Lambda status inventory
 ├── scripts/
 │   ├── test-api.py                   # API endpoint test
-│   ├── test-agent.py                 # Direct agent test
+│   ├── test-agent.py                 # Direct agent test (V1)
+│   ├── test-agent-v2-http.py         # 🆕 Agent V2 HTTP test
 │   ├── test-ocr-agent.py             # OCR flow test
 │   ├── test-dos-flujos.py            # Dual flow test
 │   └── create-ocr-image.py           # Generate test images
+├── CLAUDE.md                         # 🆕 Claude Code project instructions
 └── README.md                         # This file
 ```
 
@@ -689,7 +925,56 @@ Current setup with 1GB of vectors: **~$0.02/month** vs $2.40/month.
 
 ## 🐛 Troubleshooting
 
-### Issue: OCR not processing images
+### Agent V2 Issues
+
+#### Issue: Compilation errors
+
+**Check:**
+```bash
+cd infrastructure
+npm run build
+```
+
+**Solution:**
+Fix TypeScript errors in:
+- `lib/AgentStackV2.ts`
+- `bin/app.ts`
+- `config/environments.ts`
+
+#### Issue: Docker build fails during deployment
+
+**Check:**
+```bash
+cd agents
+python3 -c "import strands; import strands_tools; print('OK')"
+```
+
+**Solution:**
+Update `agents/requirements.txt` and ensure all dependencies are compatible:
+```bash
+pip install -r requirements.txt
+```
+
+#### Issue: Agent not responding
+
+**Check logs:**
+```bash
+# Runtime logs
+aws logs tail /aws/bedrock/agentcore/runtime/processapp_agent_runtime_v2_dev --follow --profile ans-super
+
+# Deployment logs
+aws cloudformation describe-stack-events \
+  --stack-name dev-us-east-1-agent-v2 \
+  --max-items 20 \
+  --profile ans-super
+```
+
+**Solution:**
+Check for runtime errors in logs and redeploy if needed.
+
+### Agent V1 Issues
+
+#### Issue: OCR not processing images
 
 **Check:**
 1. File extension is supported (`.png`, `.jpg`, `.pdf`, `.tiff`)
@@ -699,7 +984,7 @@ Current setup with 1GB of vectors: **~$0.02/month** vs $2.40/month.
 **Solution:**
 Re-upload file or check Textract service quotas.
 
-### Issue: Agent not finding documents
+#### Issue: Agent not finding documents
 
 **Check:**
 1. Ingestion job completed: `aws bedrock-agent get-ingestion-job`
@@ -714,7 +999,7 @@ aws bedrock-agent start-ingestion-job \
   --data-source-id ${DS_ID}
 ```
 
-### Issue: Access denied on S3 upload
+#### Issue: Access denied on S3 upload
 
 **Check:**
 1. KMS encryption specified: `--sse aws:kms --sse-kms-key-id ${KMS_KEY_ID}`
@@ -722,6 +1007,38 @@ aws bedrock-agent start-ingestion-job \
 
 **Solution:**
 Ensure bucket policy allows your IAM principal and KMS key access.
+
+---
+
+## ✅ Pre-Deployment Checklist
+
+Before deploying Agent V2, verify:
+
+```bash
+# 1. AWS Profile configured
+aws sts get-caller-identity --profile ans-super
+
+# 2. Dependencies installed
+cd infrastructure
+npm install
+
+# 3. TypeScript compiles without errors
+npm run build
+# Should complete with no errors
+
+# 4. Python dependencies valid
+cd ../agents
+pip install -r requirements.txt
+python3 -c "import strands; import strands_tools; print('✅ Dependencies OK')"
+
+# 5. Agent code has no syntax errors
+python3 -m py_compile main.py
+# Should complete with no output
+
+# 6. Ready to deploy
+cd ../infrastructure
+npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never
+```
 
 ---
 

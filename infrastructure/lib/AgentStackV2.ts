@@ -18,6 +18,7 @@
 
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as agentcore from '@aws-cdk/aws-bedrock-agentcore-alpha';
 import * as path from 'path';
 import { Construct } from 'constructs';
@@ -99,20 +100,8 @@ export class AgentStackV2 extends cdk.Stack {
       })
     );
 
-    // Grant CloudWatch Logs permissions
-    runtimeRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'logs:CreateLogGroup',
-          'logs:CreateLogStream',
-          'logs:PutLogEvents',
-        ],
-        resources: [
-          `arn:aws:logs:${region}:${props.accountId}:log-group:/aws/bedrock/agentcore/runtime/*`,
-        ],
-      })
-    );
+    // Note: CloudWatch Logs permissions are granted via runtimeLogGroup.grantWrite()
+    // (see CloudWatch Logs section below)
 
     // ========================================
     // AGENT CORE MEMORY
@@ -131,6 +120,20 @@ export class AgentStackV2 extends cdk.Stack {
     // Grant runtime access to memory (read and write)
     memory.grantRead(runtimeRole);
     memory.grantWrite(runtimeRole);
+
+    // ========================================
+    // CLOUDWATCH LOGS FOR OBSERVABILITY
+    // ========================================
+
+    // Create CloudWatch Log Group for Agent Runtime logs
+    const runtimeLogGroup = new logs.LogGroup(this, 'RuntimeLogGroup', {
+      logGroupName: `/aws/bedrock/agentcore/runtime/${runtimeName}`,
+      retention: logs.RetentionDays.ONE_WEEK, // 7 days retention
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Delete logs when stack is deleted
+    });
+
+    // Grant runtime permission to write logs
+    runtimeLogGroup.grantWrite(runtimeRole);
 
     // ========================================
     // AGENT RUNTIME ARTIFACT
@@ -173,8 +176,22 @@ export class AgentStackV2 extends cdk.Stack {
       // Protocol (HTTP for REST API)
       protocolConfiguration: agentcore.ProtocolType.HTTP,
 
-      // Disable X-Ray tracing temporarily (config issue with CloudWatch Logs destination)
+      // Disable X-Ray tracing (requires additional account setup)
+      // Keep this false until X-Ray CloudWatch Logs destination is configured
       tracingEnabled: false,
+
+      // CloudWatch Logs configuration for observability
+      // Application logs and usage logs will be sent to CloudWatch
+      loggingConfigs: [
+        {
+          logType: agentcore.LogType.APPLICATION_LOGS, // Agent invocations
+          destination: agentcore.LoggingDestination.cloudWatchLogs(runtimeLogGroup),
+        },
+        {
+          logType: agentcore.LogType.USAGE_LOGS, // Session-level resource consumption
+          destination: agentcore.LoggingDestination.cloudWatchLogs(runtimeLogGroup),
+        },
+      ],
     });
 
     this.runtimeId = runtime.agentRuntimeId;
@@ -233,6 +250,12 @@ export class AgentStackV2 extends cdk.Stack {
       value: this.memoryArn,
       description: 'Agent Core Memory v2 ARN',
       exportName: `processapp-memory-v2-arn-${props.stage}-${region}`,
+    });
+
+    new cdk.CfnOutput(this, 'RuntimeLogGroupV2', {
+      value: runtimeLogGroup.logGroupName,
+      description: 'CloudWatch Log Group for Agent Runtime v2',
+      exportName: `processapp-runtime-v2-loggroup-${props.stage}-${region}`,
     });
 
     // ========================================
