@@ -51,11 +51,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         session_id = body.get('sessionId', str(uuid.uuid4()))
 
         # Ensure session ID is at least 33 characters (AWS requirement)
+        # Use deterministic padding to maintain consistency across connections
         if len(session_id) < 33:
-            session_id = f"{session_id}-{str(uuid.uuid4())}"
+            # Pad with zeros to reach 33 characters (deterministic)
+            session_id = session_id + ('-' * (33 - len(session_id)))
+
+        # Extract metadata for KB filtering (snake_case for AWS Bedrock)
+        tenant_id = body.get('tenant_id') or body.get('tenantId')  # snake_case preferred
+        user_id = body.get('user_id') or body.get('userId')
+        user_roles = body.get('user_roles') or body.get('roles') or body.get('userRoles')
+        project_id = body.get('project_id') or body.get('projectId')
+        metadata = body.get('metadata', {})
 
         print(f'[Handler] Question: {question}')
         print(f'[Handler] Session: {session_id}')
+        print(f'[Handler] Metadata: tenant={tenant_id}, user={user_id}, roles={user_roles}, project={project_id}')
 
         # Send acknowledgment
         send_to_client(connection_id, {
@@ -73,11 +83,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         print(f'[Handler] Runtime ARN: {RUNTIME_ARN}')
         print(f'[Handler] Session ID: {session_id}')
 
-        # Prepare payload for runtime
-        payload = json.dumps({
+        # Prepare payload for runtime (include metadata for KB filtering in snake_case)
+        payload_data = {
             'inputText': question,
             'sessionId': session_id
-        }).encode('utf-8')
+        }
+
+        # Add metadata if present (for KB filtering - using snake_case for AWS Bedrock)
+        if tenant_id:
+            payload_data['tenant_id'] = tenant_id
+        if user_id:
+            payload_data['user_id'] = user_id
+        if user_roles:
+            payload_data['user_roles'] = user_roles
+        if project_id:
+            payload_data['project_id'] = project_id
+        if metadata:
+            payload_data['metadata'] = metadata
+
+        payload = json.dumps(payload_data).encode('utf-8')
+        print(f'[Handler] Payload keys: {list(payload_data.keys())}')
 
         try:
             # Invoke Agent Core Runtime via AWS SDK

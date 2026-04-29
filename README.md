@@ -74,36 +74,6 @@ aws cloudformation describe-stacks \
 
 ---
 
-### Agent V1 (Legacy) - REST API
-
-The original agent using Bedrock Agent service with REST API.
-
-**API Endpoint:** `https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query`
-
-```bash
-# 1. Get your API key (ask admin)
-aws apigateway get-api-key --api-key 6a0h023lec --include-value --query 'value' --output text
-
-# 2. Make a query
-curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_API_KEY" \
-  -d '{"question": "What documents do you have?"}'
-
-# Response
-{
-  "answer": "I have documents about...",
-  "sessionId": "abc-123-def",
-  "status": "success"
-}
-```
-
-📖 **Documentation:**
-- **Quick Reference:** [docs/API_QUICKREF.md](docs/API_QUICKREF.md) - One-page cheat sheet
-- **Complete API Guide:** [docs/API_USAGE.md](docs/API_USAGE.md) - Full reference with error handling, rate limits, and advanced usage
-
----
-
 ### For Infrastructure Developers
 
 #### Prerequisites
@@ -275,103 +245,157 @@ aws bedrock-agent get-ingestion-job \
 
 ---
 
-## 💬 Querying the Agent
+## 💬 Testing the Agent
 
-### Option 1: Via REST API (Recommended for Backends)
+### WebSocket V2 - Real-Time Streaming (Recommended)
 
-The agent is exposed via API Gateway for easy integration from any backend.
+Agent V2 uses WebSocket for real-time streaming responses with metadata filtering support.
 
-**Endpoint:** `https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query`
+#### Quick Test with wscat
 
-**Get API Key:**
 ```bash
-# Ask admin to retrieve API key
-aws apigateway get-api-key --api-key 6a0h023lec --include-value --query 'value' --output text
+# Install wscat (if not already installed)
+npm install -g wscat
 
-# Set as environment variable
-export API_KEY="<your-api-key>"
+# Get WebSocket URL from stack outputs
+WS_URL=$(aws cloudformation describe-stacks \
+  --stack-name dev-us-east-1-websocket-v2 \
+  --query 'Stacks[0].Outputs[?OutputKey==`WebSocketURLV2`].OutputValue' \
+  --output text \
+  --profile ans-super)
+
+# Connect to WebSocket
+wscat -c $WS_URL
+
+# Send query (paste after connecting)
+{
+  "action": "query",
+  "question": "¿Qué es la Ley 2381 de 2024?",
+  "tenant_id": "1",
+  "user_id": "user1",
+  "user_roles": ["viewer"],
+  "project_id": "100"
+}
 ```
 
-**Quick Example (curl):**
-```bash
-curl -X POST https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: ${API_KEY}" \
-  -d '{"question": "What documents do you have?"}'
+**With Metadata Filtering:**
+```json
+{
+  "action": "query",
+  "question": "Search for Colpensiones documents",
+  "sessionId": "my-session-123",
+  "tenant_id": "company-123",
+  "user_id": "user456",
+  "user_roles": ["admin", "analyst"],
+  "project_id": "project-789",
+  "metadata": {
+    "custom_filter": "value"
+  }
+}
 ```
 
-**Python Example:**
+#### Expected Response Format
+
+```json
+// Status message
+{"type": "status", "message": "Processing your request...", "sessionId": "..."}
+
+// Streaming chunks
+{"type": "chunk", "data": "## Decreto 1558 de 2024...", "sessionId": "..."}
+{"type": "chunk", "data": " - Ahorro Individual\n\n**Tema:**...", "sessionId": "..."}
+
+// Completion
+{
+  "type": "complete",
+  "sessionId": "...",
+  "stats": {
+    "message_count": 5,
+    "window_size": 5,
+    "truncation_count": 0,
+    "age_minutes": 2.3
+  },
+  "metadata_filtered": true
+}
+```
+
+#### Python Client Example
+
 ```python
-import requests
-
-API_ENDPOINT = "https://ay5hutn96k.execute-api.us-east-1.amazonaws.com/dev/query"
-API_KEY = "your-api-key"
-
-response = requests.post(
-    API_ENDPOINT,
-    headers={"Content-Type": "application/json", "x-api-key": API_KEY},
-    json={"question": "What was the incident date?"}
-)
-
-result = response.json()
-print(result['answer'])
-```
-
-**Test Script:**
-```bash
-# Set API key first
-export API_KEY="your-api-key"
-
-# Run tests
-python3 scripts/test-api.py
-```
-
-📖 **Full API Documentation:** [docs/API_USAGE.md](docs/API_USAGE.md)
-
-### Option 2: Using Python SDK (Direct AWS Access)
-
-Create a script `query-agent.py`:
-
-```python
-#!/usr/bin/env python3
-import boto3
+import asyncio
+import websockets
 import json
-import uuid
 
-# Initialize client
-session = boto3.Session(profile_name='default')
-bedrock_agent_runtime = session.client('bedrock-agent-runtime', region_name='us-east-1')
+WS_URL = "wss://<your-websocket-url>/dev"  # Get from stack outputs
 
-# Agent configuration
-AGENT_ID = 'QWTVV3BY3G'
-AGENT_ALIAS_ID = 'QZITGFMONE'
+async def query_agent(question, tenant_id="1"):
+    async with websockets.connect(WS_URL) as ws:
+        # Send query with metadata (snake_case for AWS Bedrock)
+        await ws.send(json.dumps({
+            'action': 'query',
+            'question': question,
+            'tenant_id': tenant_id,
+            'user_id': f'user_{tenant_id}',
+            'user_roles': ['viewer']
+        }))
+        
+        # Receive streaming response
+        full_response = ""
+        async for message in ws:
+            data = json.loads(message)
+            
+            if data['type'] == 'chunk':
+                chunk = data['data']
+                print(chunk, end='', flush=True)
+                full_response += chunk
+                
+            elif data['type'] == 'complete':
+                print(f"\n✅ Complete")
+                print(f"Stats: {data.get('stats', {})}")
+                print(f"Filtered: {data.get('metadata_filtered', False)}")
+                break
+                
+        return full_response
 
-def ask_agent(question):
-    """Ask a question to the Bedrock Agent"""
-    session_id = str(uuid.uuid4())
+# Run
+asyncio.run(query_agent("¿Qué es la Ley 2381 de 2024?"))
+```
 
-    response = bedrock_agent_runtime.invoke_agent(
-        agentId=AGENT_ID,
-        agentAliasId=AGENT_ALIAS_ID,
-        sessionId=session_id,
-        inputText=question
-    )
+#### Test Multi-Turn Conversation
 
-    # Process response stream
-    answer = ""
-    for event in response['completion']:
-        if 'chunk' in event:
-            chunk = event['chunk']
-            if 'bytes' in chunk:
-                answer += chunk['bytes'].decode('utf-8')
+```bash
+# Use same sessionId for conversation continuity
+SESSION="test-$(date +%s)"
 
-    return answer
+# Turn 1
+wscat -c $WS_URL
+> {"action": "query", "question": "Mi nombre es Carlos", "sessionId": "$SESSION", "tenant_id": "1", "user_id": "user1", "user_roles": ["viewer"]}
 
-# Example usage
-if __name__ == "__main__":
-    question = "What information do you have about the security incident?"
-    answer = ask_agent(question)
-    print(f"Q: {question}\nA: {answer}")
+# Turn 2 - should remember name
+> {"action": "query", "question": "¿Cuál es mi nombre?", "sessionId": "$SESSION", "tenant_id": "1", "user_id": "user1", "user_roles": ["viewer"]}
+
+# Expected: Agent responds with "Carlos"
+```
+
+#### Automated Test Script
+
+```bash
+# Install websockets library (if not installed)
+pip3 install websockets
+
+# Run comprehensive tests
+python3 scripts/test-websocket-metadata.py
+
+# Tests include:
+# 1. Query WITH metadata (tenant isolation)
+# 2. Query WITHOUT metadata (unrestricted)
+# 3. Multi-turn conversation (context memory)
+```
+
+📖 **Full WebSocket Documentation:** [docs/WEBSOCKET_STREAMING_GUIDE.md](docs/WEBSOCKET_STREAMING_GUIDE.md)
+
+**Important:** All metadata fields use **snake_case** format for AWS Bedrock compatibility:
+- ✅ `tenant_id`, `user_id`, `user_roles`, `project_id`
+- ❌ ~~`tenantId`, `userId`, `roles`, `projectId`~~ (deprecated)
 ```
 
 Run:
