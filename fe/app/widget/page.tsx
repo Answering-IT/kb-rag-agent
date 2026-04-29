@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Chat } from '@/components/chat';
 import { StreamingChatConfig } from '@/hooks/useStreamingChat';
+import { getTranslations } from '@/lib/translations';
 
 interface WidgetMessage {
   type: 'INIT' | 'SEND_MESSAGE';
@@ -20,6 +21,7 @@ interface WidgetMessage {
  * 5. Widget -> Parent: CONNECTION_CHANGE (when WebSocket connects/disconnects)
  */
 export default function WidgetPage() {
+  const t = getTranslations();
   const [config, setConfig] = useState<StreamingChatConfig | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -136,9 +138,9 @@ export default function WidgetPage() {
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-primary mx-auto mb-4"></div>
-          <p className="text-foreground-secondary">Initializing widget...</p>
+          <p className="text-foreground-secondary">{t.initializingWidget}</p>
           <p className="text-xs text-foreground-secondary mt-2">
-            {inIframe === true ? 'Waiting for parent...' : 'Loading...'}
+            {inIframe === true ? t.waitingForParent : t.loading}
           </p>
         </div>
       </div>
@@ -149,10 +151,10 @@ export default function WidgetPage() {
     <div className="h-screen bg-background">
       {isStandalone && (
         <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 text-xs text-yellow-600 dark:text-yellow-400">
-          ⚠️ Widget running in standalone mode (no parent frame detected)
+          {t.standaloneMode}
         </div>
       )}
-      <Chat config={config} className="h-full" placeholder="How can I help you?" />
+      <Chat config={config} className="h-full" placeholder={t.widgetPlaceholder} />
     </div>
   );
 }

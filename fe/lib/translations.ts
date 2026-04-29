@@ -14,6 +14,12 @@ export interface Translations {
   askPlaceholder: string;
   send: string;
   version: string;
+  // Widget specific
+  widgetPlaceholder: string;
+  initializingWidget: string;
+  waitingForParent: string;
+  loading: string;
+  standaloneMode: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -29,6 +35,12 @@ export const translations: Record<Language, Translations> = {
     askPlaceholder: 'Pregúntame lo que quieras...',
     send: 'Enviar',
     version: 'Versión',
+    // Widget specific
+    widgetPlaceholder: '¿Cómo puedo ayudarte?',
+    initializingWidget: 'Iniciando widget...',
+    waitingForParent: 'Esperando conexión...',
+    loading: 'Cargando...',
+    standaloneMode: 'Widget ejecutándose en modo independiente (sin ventana padre detectada)',
   },
   en: {
     connectionMode: 'Connection Mode:',
@@ -42,6 +54,12 @@ export const translations: Record<Language, Translations> = {
     askPlaceholder: 'Ask me anything...',
     send: 'Send',
     version: 'Version',
+    // Widget specific
+    widgetPlaceholder: 'How can I help you?',
+    initializingWidget: 'Initializing widget...',
+    waitingForParent: 'Waiting for parent...',
+    loading: 'Loading...',
+    standaloneMode: '⚠️ Widget running in standalone mode (no parent frame detected)',
   },
 };
 
