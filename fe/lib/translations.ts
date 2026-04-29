@@ -23,7 +23,7 @@ export const translations: Record<Language, Translations> = {
     websocket: 'WebSocket',
     connectingToServer: 'Conectando al servidor...',
     startConversation: 'Inicia una conversación',
-    startConversationDesc: 'Pregúntame lo que quieras sobre tus documentos. Te proporcionaré respuestas detalladas con AWS Bedrock.',
+    startConversationDesc: 'Pregúntame lo que quieras sobre tus documentos.',
     connectedReady: 'Conectado y listo',
     connecting: 'Conectando...',
     askPlaceholder: 'Pregúntame lo que quieras...',
