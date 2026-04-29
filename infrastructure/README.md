@@ -1,6 +1,6 @@
 # ProcessApp RAG Infrastructure
 
-Cost-effective RAG application infrastructure using AWS CDK with Amazon Bedrock Knowledge Bases and S3 vector storage.
+Cost-effective RAG application infrastructure using AWS CDK with Bedrock Agent Core Runtime, Knowledge Bases, and S3 vector storage.
 
 ## Architecture Overview
 
@@ -11,13 +11,20 @@ S3 Docs → EventBridge → Lambda (OCR) → Textract
                             ↓
                         S3 Vectors → Bedrock Knowledge Base
                                           ↓
-                                    Bedrock Claude Sonnet
+                                    Agent Core Runtime (Strand SDK)
                                           ↓
-                                    Bedrock Guardrails (PII)
+                                    Bedrock Nova Pro
+                                          ↓
+                                    Streaming API (Lambda Function URL)
+                                          ↓
+                                    Next.js Frontend
 ```
 
 ## Features
 
+- **Agent Core Runtime**: Custom agent using Strand SDK with tool calling
+- **Normative Framework**: Pre-loaded Colombian pension regulations (Colpensiones)
+- **Streaming API**: REST endpoint with streaming response (Lambda Function URL)
 - **Cost-Optimized Storage**: S3 Intelligent-Tiering + S3-based vectors (90% cheaper than OpenSearch)
 - **Document Processing**: Textract OCR, chunking (512 tokens, 20% overlap)
 - **Embeddings**: Titan Embeddings v2 with storage optimization (-50% cost)
@@ -28,7 +35,7 @@ S3 Docs → EventBridge → Lambda (OCR) → Textract
 
 ## Prerequisites
 
-- **AWS CLI** configured with profile `default`
+- **AWS CLI** configured with profile `ans-super`
 - **Node.js** v18+ and npm
 - **AWS CDK** v2.100.0+
 - **AWS Account**: 708819485463
@@ -46,32 +53,43 @@ npm install
 ### 2. Bootstrap CDK
 
 ```bash
-cdk bootstrap aws://708819485463/us-east-1 --profile default
+cdk bootstrap aws://708819485463/us-east-1 --profile ans-super
 ```
 
-### 3. Synthesize CloudFormation
+### 3. Compile and Deploy
 
 ```bash
 npm run build
-cdk synth
-```
-
-### 4. Deploy All Stacks
-
-```bash
-cdk deploy --all --profile default --require-approval never
+cdk deploy --all --profile ans-super --require-approval never
 ```
 
 This will deploy the following stacks:
-- `dev-us-east-1/prereqs-stage/prereqs` - Global S3 buckets and IAM roles
-- `dev-us-east-1/deployment-stage/security` - KMS keys, policies
-- `dev-us-east-1/deployment-stage/vector-store` - S3 vector indexing
-- `dev-us-east-1/deployment-stage/bedrock` - Knowledge Base
-- `dev-us-east-1/deployment-stage/document-processing` - OCR, embeddings
-- `dev-us-east-1/deployment-stage/guardrails` - PII filtering
-- `dev-us-east-1/deployment-stage/monitoring` - CloudWatch
+- `dev-us-east-1-prereqs` - Global S3 buckets, IAM roles, KMS keys
+- `dev-us-east-1-security` - Security policies
+- `dev-us-east-1-bedrock` - Knowledge Base with S3 vector storage
+- `dev-us-east-1-document-processing` - OCR Lambda with Textract
+- `dev-us-east-1-guardrails` - PII filtering guardrails
+- `dev-us-east-1-agent-v2` - Agent Core Runtime with Strand SDK
+- `dev-us-east-1-streaming-api` - Lambda Function URL for streaming chat
+- `dev-us-east-1-monitoring` - CloudWatch dashboards and alarms
 
 **Deployment time**: ~15-20 minutes
+
+### 4. Test the API
+
+```bash
+# Get the streaming API URL from outputs
+STREAMING_URL=$(aws cloudformation describe-stacks \
+  --stack-name dev-us-east-1-streaming-api \
+  --query 'Stacks[0].Outputs[?OutputKey==`StreamingChatURL`].OutputValue' \
+  --output text \
+  --profile ans-super)
+
+# Test with curl
+curl -X POST "$STREAMING_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"¿Qué es Colpensiones?","sessionId":"test-123"}'
+```
 
 ### 5. Verify Deployment
 

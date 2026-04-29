@@ -7,6 +7,14 @@ interface Message {
   content: string;
 }
 
+export interface WebSocketChatConfig {
+  wsUrl?: string;
+  sessionId?: string;
+  onMessageSent?: (message: Message) => void;
+  onMessageReceived?: (message: Message) => void;
+  onConnectionChange?: (connected: boolean) => void;
+}
+
 interface UseWebSocketChatReturn {
   messages: Message[];
   isLoading: boolean;
@@ -15,52 +23,63 @@ interface UseWebSocketChatReturn {
   sessionId: string;
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://1j1xzo7n4h.execute-api.us-east-1.amazonaws.com/dev';
+const DEFAULT_WS_URL = process.env.NEXT_PUBLIC_WS_URL || '';
 
-export function useWebSocketChat(): UseWebSocketChatReturn {
+export function useWebSocketChat(config: WebSocketChatConfig = {}): UseWebSocketChatReturn {
+  const {
+    wsUrl = DEFAULT_WS_URL,
+    sessionId: externalSessionId,
+    onMessageSent,
+    onMessageReceived,
+    onConnectionChange,
+  } = config;
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [sessionId] = useState(() => uuidv4());
+  const [sessionId] = useState(() => externalSessionId || uuidv4());
 
   const wsRef = useRef<WebSocket | null>(null);
-  const currentAssistantMessageRef = useRef<{ id: string } | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const currentAssistantMessageRef = useRef<{ id: string; content: string } | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    console.log('[WebSocketChat] Connecting to:', wsUrl);
 
     try {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('[WebSocketChat] Connected');
         setIsConnected(true);
+        reconnectAttemptsRef.current = 0;
+        onConnectionChange?.(true);
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('[WebSocketChat] Message:', data);
 
           if (data.type === 'chunk' && data.data) {
             // Stream response chunk by chunk
             if (!currentAssistantMessageRef.current) {
               // Create new assistant message
               const newId = uuidv4();
-              currentAssistantMessageRef.current = { id: newId };
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: newId,
-                  role: 'assistant',
-                  content: data.data,
-                },
-              ]);
+              currentAssistantMessageRef.current = { id: newId, content: data.data };
+              const newMessage: Message = {
+                id: newId,
+                role: 'assistant',
+                content: data.data,
+              };
+              setMessages((prev) => [...prev, newMessage]);
             } else {
               // Append chunk to existing message
               const messageId = currentAssistantMessageRef.current.id;
+              currentAssistantMessageRef.current.content += data.data;
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === messageId
@@ -70,12 +89,22 @@ export function useWebSocketChat(): UseWebSocketChatReturn {
               );
             }
           } else if (data.type === 'complete') {
-            // Response complete
-            console.log('Response complete');
+            console.log('[WebSocketChat] Response complete');
+
+            // Emit onMessageReceived
+            if (currentAssistantMessageRef.current) {
+              const finalMessage: Message = {
+                id: currentAssistantMessageRef.current.id,
+                role: 'assistant',
+                content: currentAssistantMessageRef.current.content,
+              };
+              onMessageReceived?.(finalMessage);
+            }
+
             currentAssistantMessageRef.current = null;
             setIsLoading(false);
           } else if (data.type === 'error') {
-            console.error('WebSocket error:', data.message);
+            console.error('[WebSocketChat] Error:', data.message);
             const errorMessage: Message = {
               id: uuidv4(),
               role: 'assistant',
@@ -86,38 +115,37 @@ export function useWebSocketChat(): UseWebSocketChatReturn {
             setIsLoading(false);
           }
         } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
+          console.error('[WebSocketChat] Failed to parse message:', error);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('[WebSocketChat] Disconnected');
+        setIsConnected(false);
+        onConnectionChange?.(false);
+
+        // Attempt reconnect
+        if (reconnectAttemptsRef.current < 5) {
+          reconnectAttemptsRef.current++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+          console.log(`[WebSocketChat] Reconnecting in ${delay}ms...`);
+          reconnectTimeoutRef.current = setTimeout(connect, delay);
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setIsConnected(false);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        setIsConnected(false);
-        wsRef.current = null;
-
-        // Auto-reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('Attempting to reconnect...');
-          connect();
-        }, 3000);
+        console.error('[WebSocketChat] Error:', error);
       };
 
       wsRef.current = ws;
     } catch (error) {
-      console.error('Failed to connect to WebSocket:', error);
-      setIsConnected(false);
+      console.error('[WebSocketChat] Connection error:', error);
     }
-  }, []);
+  }, [wsUrl, onConnectionChange, onMessageReceived]);
 
   const sendMessage = useCallback((content: string) => {
-    if (!content.trim() || isLoading) return;
+    if (!content.trim() || isLoading || !isConnected) return;
 
-    // Add user message
     const userMessage: Message = {
       id: uuidv4(),
       role: 'user',
@@ -126,61 +154,18 @@ export function useWebSocketChat(): UseWebSocketChatReturn {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
-    // Ensure connection
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      connect();
-      // Wait for connection before sending
-      const checkConnection = setInterval(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          clearInterval(checkConnection);
-          sendToWebSocket(content);
-        }
-      }, 100);
+    onMessageSent?.(userMessage);
 
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        clearInterval(checkConnection);
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          const errorMessage: Message = {
-            id: uuidv4(),
-            role: 'assistant',
-            content: 'Failed to connect to the server. Please try again.',
-          };
-          setMessages((prev) => [...prev, errorMessage]);
-          setIsLoading(false);
-        }
-      }, 5000);
-    } else {
-      sendToWebSocket(content);
+    // Send via WebSocket
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: 'message',
+        question: content,
+        sessionId: sessionId,
+      }));
     }
-  }, [isLoading, connect]);
+  }, [isLoading, isConnected, sessionId, onMessageSent]);
 
-  const sendToWebSocket = (content: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket not connected');
-      return;
-    }
-
-    const message = {
-      question: content,
-      sessionId: sessionId,
-    };
-
-    try {
-      wsRef.current.send(JSON.stringify(message));
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      const errorMessage: Message = {
-        id: uuidv4(),
-        role: 'assistant',
-        content: 'Failed to send message. Please try again.',
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-      setIsLoading(false);
-    }
-  };
-
-  // Connect on mount
   useEffect(() => {
     connect();
 
