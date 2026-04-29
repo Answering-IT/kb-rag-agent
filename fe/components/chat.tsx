@@ -1,9 +1,11 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Send, Bot, User, WifiOff, Radio, Zap } from 'lucide-react';
 import { useChat, ChatMode, ChatConfig } from '@/hooks/useChat';
 import { MarkdownMessage } from './markdown-message';
+import { getTranslations, APP_VERSION } from '@/lib/translations';
 
 interface ChatProps {
   className?: string;
@@ -14,11 +16,24 @@ interface ChatProps {
 
 export function Chat({
   className = '',
-  placeholder = 'Ask me anything...',
+  placeholder,
   config,
   showModeSelector = true
 }: ChatProps) {
-  const [mode, setMode] = useState<ChatMode>(config?.mode || 'streaming');
+  const pathname = usePathname();
+  const t = getTranslations();
+
+  // Always show mode selector on test page, otherwise respect environment variable
+  const shouldShowSelector = pathname === '/test'
+    ? true
+    : (process.env.NEXT_PUBLIC_SHOW_MODE_SELECTOR === 'true');
+
+  // Set translated placeholder
+  const actualPlaceholder = placeholder || t.askPlaceholder;
+
+  // Read default mode from env var (defaults to 'websocket')
+  const defaultMode = (process.env.NEXT_PUBLIC_CHAT_MODE as ChatMode) || 'websocket';
+  const [mode, setMode] = useState<ChatMode>(config?.mode || defaultMode);
   const { messages, isLoading, isConnected, sendMessage } = useChat({ ...config, mode });
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -39,9 +54,9 @@ export function Chat({
   return (
     <div className={`flex flex-col h-full bg-background-secondary dark:bg-background ${className}`}>
       {/* Mode selector */}
-      {showModeSelector && (
+      {shouldShowSelector && (
         <div className="border-b border-border-light dark:border-border-dark bg-background px-4 py-2 flex items-center justify-between">
-          <span className="text-xs text-foreground-secondary font-medium">Connection Mode:</span>
+          <span className="text-xs text-foreground-secondary font-medium">{t.connectionMode}</span>
           <div className="flex gap-1 bg-background-secondary dark:bg-background/50 p-1 rounded-lg">
             <button
               onClick={() => setMode('streaming')}
@@ -52,7 +67,7 @@ export function Chat({
               }`}
             >
               <Zap className="w-3 h-3" />
-              REST
+              {t.rest}
             </button>
             <button
               onClick={() => setMode('websocket')}
@@ -63,7 +78,7 @@ export function Chat({
               }`}
             >
               <Radio className="w-3 h-3" />
-              WebSocket
+              {t.websocket}
             </button>
           </div>
         </div>
@@ -73,7 +88,7 @@ export function Chat({
       {!isConnected && (
         <div className="bg-accent-warning/10 dark:bg-accent-warning/5 border-b border-accent-warning/30 dark:border-accent-warning/20 px-4 py-3 flex items-center gap-3 text-accent-warning animate-pulse">
           <WifiOff className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">Connecting to server...</span>
+          <span className="text-sm font-medium">{t.connectingToServer}</span>
         </div>
       )}
 
@@ -85,18 +100,18 @@ export function Chat({
               <div className="mb-6 inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-primary/20 to-accent-tertiary/20 dark:from-accent-primary/10 dark:to-accent-tertiary/10">
                 <Bot className="w-8 h-8 text-accent-primary dark:text-accent-tertiary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Start a conversation</h3>
-              <p className="text-sm text-foreground-secondary mb-6">Ask me anything about your documents. I&apos;ll provide detailed answers powered by AWS Bedrock.</p>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{t.startConversation}</h3>
+              <p className="text-sm text-foreground-secondary mb-6">{t.startConversationDesc}</p>
 
               {isConnected ? (
                 <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-success/10 dark:bg-accent-success/5 text-accent-success text-xs font-medium">
                   <div className="w-2 h-2 rounded-full bg-accent-success animate-pulse" />
-                  Connected and ready
+                  {t.connectedReady}
                 </div>
               ) : (
                 <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-warning/10 dark:bg-accent-warning/5 text-accent-warning text-xs font-medium">
                   <div className="w-2 h-2 rounded-full bg-accent-warning animate-pulse" />
-                  Connecting...
+                  {t.connecting}
                 </div>
               )}
             </div>
@@ -159,7 +174,7 @@ export function Chat({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={placeholder}
+            placeholder={actualPlaceholder}
             disabled={isLoading || !isConnected}
             className="flex-1 px-4 py-3 border border-border-light dark:border-border-dark rounded-lg focus-ring bg-background dark:bg-background-secondary text-foreground placeholder-foreground-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           />
@@ -169,9 +184,16 @@ export function Chat({
             className="px-4 py-3 bg-gradient-to-r from-accent-primary to-accent-tertiary text-white font-medium rounded-lg hover:shadow-lg hover:from-accent-primary/90 hover:to-accent-tertiary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 group"
           >
             <Send className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            <span className="hidden sm:inline">Send</span>
+            <span className="hidden sm:inline">{t.send}</span>
           </button>
         </form>
+
+        {/* Version label */}
+        <div className="mt-2 text-center">
+          <span className="text-xs text-foreground-secondary/60">
+            {t.version} {APP_VERSION}
+          </span>
+        </div>
       </div>
     </div>
   );
