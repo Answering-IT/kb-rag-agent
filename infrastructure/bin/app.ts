@@ -19,12 +19,10 @@ import { BedrockStack } from '../lib/BedrockStack';
 import { DocumentProcessingStack } from '../lib/DocumentProcessingStack';
 import { GuardrailsStack } from '../lib/GuardrailsStack';
 import { MonitoringStack } from '../lib/MonitoringStack';
-import { AgentStack } from '../lib/AgentStack';
-import { APIStack } from '../lib/APIStack';
-import { SessionMemoryStack } from '../lib/SessionMemoryStack';
-import { WebSocketStack } from '../lib/WebSocketStack';
 import { AgentStackV2 } from '../lib/AgentStackV2';
 import { WebSocketStackV2 } from '../lib/WebSocketStackV2';
+import { BedrockStreamApiStack } from '../lib/BedrockStreamApiStack';
+// import { StreamingAPIStack } from '../lib/StreamingAPIStack'; // Commented out - using WebSocket instead
 
 /**
  * Main App
@@ -107,64 +105,6 @@ SDLCAccounts.forEach((account) => {
         }
       );
 
-      const sessionMemoryStack = new SessionMemoryStack(
-        app,
-        `${account.stage}-${region}-session-memory`,
-        {
-          stage: account.stage,
-          env,
-        }
-      );
-
-      const agentStack = new AgentStack(
-        app,
-        `${account.stage}-${region}-agent`,
-        {
-          stage: account.stage,
-          accountId: account.id,
-          knowledgeBaseId: bedrockStack.knowledgeBaseId,
-          guardrailId: guardrailsStack.guardrailId,
-          guardrailVersion: guardrailsStack.guardrailVersion,
-          docsBucket: prereqsStack.docsBucket,
-          env,
-        }
-      );
-      agentStack.addDependency(bedrockStack);
-      agentStack.addDependency(guardrailsStack);
-
-      const apiStack = new APIStack(
-        app,
-        `${account.stage}-${region}-api`,
-        {
-          stage: account.stage,
-          accountId: account.id,
-          agentId: agentStack.agentId,
-          agentAliasId: agentStack.agentAliasId,
-          knowledgeBaseId: bedrockStack.knowledgeBaseId,
-          conversationTable: sessionMemoryStack.conversationTable,
-          env,
-        }
-      );
-      apiStack.addDependency(agentStack);
-      apiStack.addDependency(sessionMemoryStack);
-
-      // WebSocket API for streaming responses
-      const webSocketStack = new WebSocketStack(
-        app,
-        `${account.stage}-${region}-websocket`,
-        {
-          stage: account.stage,
-          accountId: account.id,
-          agentId: agentStack.agentId,
-          agentAliasId: agentStack.agentAliasId,
-          knowledgeBaseId: bedrockStack.knowledgeBaseId,
-          conversationTableName: sessionMemoryStack.conversationTable.tableName,
-          env,
-        }
-      );
-      webSocketStack.addDependency(agentStack);
-      webSocketStack.addDependency(sessionMemoryStack);
-
       // ========================================
       // AGENT V2 (Agent Core Runtime with Strand SDK)
       // ========================================
@@ -181,7 +121,7 @@ SDLCAccounts.forEach((account) => {
       );
       agentStackV2.addDependency(bedrockStack);
 
-      // WebSocket API for Agent Core Runtime V2 (streaming)
+      // WebSocket API for Agent Core Runtime V2
       const webSocketStackV2 = new WebSocketStackV2(
         app,
         `${account.stage}-${region}-websocket-v2`,
@@ -194,6 +134,40 @@ SDLCAccounts.forEach((account) => {
         }
       );
       webSocketStackV2.addDependency(agentStackV2);
+
+      // REST Streaming API for Agent Core Runtime V2
+      const bedrockStreamApiStack = new BedrockStreamApiStack(
+        app,
+        `${account.stage}-${region}-bedrock-stream-api`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          runtimeId: agentStackV2.runtimeId,
+          memoryId: agentStackV2.memoryId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          env,
+        }
+      );
+      bedrockStreamApiStack.addDependency(agentStackV2);
+
+      // Streaming API for Agent Core Runtime V2 (REST with streaming)
+      // COMMENTED OUT - Using WebSocket instead for now
+      /*
+      const streamingAPIStack = new StreamingAPIStack(
+        app,
+        `${account.stage}-${region}-streaming-api`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          runtimeId: agentStackV2.runtimeId,
+          memoryId: agentStackV2.memoryId,
+          knowledgeBaseId: bedrockStack.knowledgeBaseId,
+          runtimeEndpointUrl: agentStackV2.endpointUrl,
+          env,
+        }
+      );
+      streamingAPIStack.addDependency(agentStackV2);
+      */
 
       const monitoringStack = new MonitoringStack(
         app,
@@ -216,10 +190,9 @@ SDLCAccounts.forEach((account) => {
         cdk.Tags.of(bedrockStack).add(key, value);
         cdk.Tags.of(docProcessingStack).add(key, value);
         cdk.Tags.of(guardrailsStack).add(key, value);
-        cdk.Tags.of(sessionMemoryStack).add(key, value);
-        cdk.Tags.of(agentStack).add(key, value);
-        cdk.Tags.of(apiStack).add(key, value);
-        cdk.Tags.of(webSocketStack).add(key, value);
+        cdk.Tags.of(agentStackV2).add(key, value);
+        cdk.Tags.of(webSocketStackV2).add(key, value);
+        cdk.Tags.of(bedrockStreamApiStack).add(key, value);
         cdk.Tags.of(monitoringStack).add(key, value);
       });
     }

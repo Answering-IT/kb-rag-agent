@@ -17,7 +17,7 @@ export const SDLCAccounts: SDLCAccount[] = [
   {
     id: '708819485463',
     stage: 'dev',
-    profile: 'default',
+    profile: 'ans-super',
   },
 ];
 
