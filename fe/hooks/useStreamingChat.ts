@@ -69,9 +69,9 @@ export function useStreamingChat(config: StreamingChatConfig = {}): UseStreaming
     abortControllerRef.current = new AbortController();
 
     try {
-      // Prepare request payload
+      // Prepare request payload (use 'prompt' for Lambda Function URL)
       const requestBody: any = {
-        question: content,
+        prompt: content,
         sessionId: sessionId,
       };
 
@@ -101,89 +101,57 @@ export function useStreamingChat(config: StreamingChatConfig = {}): UseStreaming
         throw new Error('No response body');
       }
 
-      // Read streaming response
+      // Read streaming response from Lambda (RESPONSE_STREAM mode)
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
-      let buffer = '';
+      // Create new assistant message
+      const newId = uuidv4();
+      currentAssistantMessageRef.current = { id: newId, content: '' };
+      const newMessage = {
+        id: newId,
+        role: 'assistant' as const,
+        content: '',
+      };
+      setMessages((prev) => [...prev, newMessage]);
 
       while (true) {
         const { done, value } = await reader.read();
 
-        if (done) break;
+        if (done) {
+          console.log('[StreamingChat] Response complete');
 
-        // Decode chunk
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete lines (NDJSON format)
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          try {
-            const data = JSON.parse(line);
-
-            if (data.type === 'chunk' && data.data) {
-              // Stream response chunk by chunk
-              if (!currentAssistantMessageRef.current) {
-                // Create new assistant message
-                const newId = uuidv4();
-                currentAssistantMessageRef.current = { id: newId, content: data.data };
-                const newMessage = {
-                  id: newId,
-                  role: 'assistant' as const,
-                  content: data.data,
-                };
-                setMessages((prev) => [...prev, newMessage]);
-              } else {
-                // Append chunk to existing message
-                const messageId = currentAssistantMessageRef.current.id;
-                currentAssistantMessageRef.current.content += data.data;
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === messageId
-                      ? { ...msg, content: msg.content + data.data }
-                      : msg
-                  )
-                );
-              }
-            } else if (data.type === 'complete') {
-              // Response complete
-              console.log('[StreamingChat] Response complete');
-
-              // Emit onMessageReceived with final message
-              if (currentAssistantMessageRef.current) {
-                const finalMessage: Message = {
-                  id: currentAssistantMessageRef.current.id,
-                  role: 'assistant',
-                  content: currentAssistantMessageRef.current.content,
-                };
-                onMessageReceived?.(finalMessage);
-              }
-
-              currentAssistantMessageRef.current = null;
-              setIsLoading(false);
-            } else if (data.type === 'error') {
-              console.error('[StreamingChat] Error:', data.message);
-              const errorMessage: Message = {
-                id: uuidv4(),
-                role: 'assistant',
-                content: `Error: ${data.message || 'An error occurred'}`,
-              };
-              setMessages((prev) => [...prev, errorMessage]);
-              currentAssistantMessageRef.current = null;
-              setIsLoading(false);
-            }
-          } catch (error) {
-            console.error('[StreamingChat] Failed to parse line:', line, error);
+          // Emit onMessageReceived
+          if (currentAssistantMessageRef.current) {
+            const finalMessage: Message = {
+              id: currentAssistantMessageRef.current.id,
+              role: 'assistant',
+              content: currentAssistantMessageRef.current.content,
+            };
+            onMessageReceived?.(finalMessage);
           }
+
+          currentAssistantMessageRef.current = null;
+          setIsLoading(false);
+          break;
+        }
+
+        // Decode chunk (plain text)
+        const text = decoder.decode(value, { stream: true });
+
+        if (text) {
+          // Append chunk to existing message
+          const messageId = currentAssistantMessageRef.current!.id;
+          currentAssistantMessageRef.current!.content += text;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === messageId
+                ? { ...msg, content: msg.content + text }
+                : msg
+            )
+          );
         }
       }
-
-      // Ensure loading is stopped
-      setIsLoading(false);
 
     } catch (error: any) {
       console.error('[StreamingChat] Error:', error);

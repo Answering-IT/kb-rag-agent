@@ -1,18 +1,25 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { Send, Bot, User, WifiOff } from 'lucide-react';
-import { useStreamingChat, StreamingChatConfig } from '@/hooks/useStreamingChat';
+import { Send, Bot, User, WifiOff, Radio, Zap } from 'lucide-react';
+import { useChat, ChatMode, ChatConfig } from '@/hooks/useChat';
 import { MarkdownMessage } from './markdown-message';
 
 interface ChatProps {
   className?: string;
   placeholder?: string;
-  config?: StreamingChatConfig;
+  config?: ChatConfig;
+  showModeSelector?: boolean;
 }
 
-export function Chat({ className = '', placeholder = 'Ask me anything...', config }: ChatProps) {
-  const { messages, isLoading, isConnected, sendMessage } = useStreamingChat(config);
+export function Chat({
+  className = '',
+  placeholder = 'Ask me anything...',
+  config,
+  showModeSelector = true
+}: ChatProps) {
+  const [mode, setMode] = useState<ChatMode>(config?.mode || 'streaming');
+  const { messages, isLoading, isConnected, sendMessage } = useChat({ ...config, mode });
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -31,6 +38,37 @@ export function Chat({ className = '', placeholder = 'Ask me anything...', confi
 
   return (
     <div className={`flex flex-col h-full bg-background-secondary dark:bg-background ${className}`}>
+      {/* Mode selector */}
+      {showModeSelector && (
+        <div className="border-b border-border-light dark:border-border-dark bg-background px-4 py-2 flex items-center justify-between">
+          <span className="text-xs text-foreground-secondary font-medium">Connection Mode:</span>
+          <div className="flex gap-1 bg-background-secondary dark:bg-background/50 p-1 rounded-lg">
+            <button
+              onClick={() => setMode('streaming')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${
+                mode === 'streaming'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-foreground-secondary hover:text-foreground'
+              }`}
+            >
+              <Zap className="w-3 h-3" />
+              REST
+            </button>
+            <button
+              onClick={() => setMode('websocket')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${
+                mode === 'websocket'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-foreground-secondary hover:text-foreground'
+              }`}
+            >
+              <Radio className="w-3 h-3" />
+              WebSocket
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Connection status banner */}
       {!isConnected && (
         <div className="bg-accent-warning/10 dark:bg-accent-warning/5 border-b border-accent-warning/30 dark:border-accent-warning/20 px-4 py-3 flex items-center gap-3 text-accent-warning animate-pulse">
