@@ -167,9 +167,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if user_access_chain:
             payload_data['user_access_chain'] = user_access_chain
 
-        # Pass the metadata object (contains extra fields like userAgent, timestamp, etc.)
+        # Pass the metadata object (filter out frontend-only fields)
         if metadata_obj and len(metadata_obj) > 0:
-            payload_data['metadata'] = metadata_obj
+            # Filter out fields that are NOT part of KB metadata schema
+            # These fields are for frontend tracking only and should not be sent to the agent
+            filtered_metadata = {
+                k: v for k, v in metadata_obj.items()
+                if k not in ['userAgent', 'referrer', 'timestamp']
+            }
+
+            if filtered_metadata:
+                payload_data['metadata'] = filtered_metadata
+                print(f'[Handler] Filtered metadata (removed userAgent, referrer, timestamp): {filtered_metadata}')
 
         payload = json.dumps(payload_data).encode('utf-8')
         print(f'[Handler] Payload keys: {list(payload_data.keys())}')
