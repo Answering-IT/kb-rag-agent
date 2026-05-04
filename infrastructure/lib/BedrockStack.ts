@@ -17,7 +17,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import { Construct } from 'constructs';
-import { KnowledgeBaseConfig } from '../config/environments';
+import { KnowledgeBaseConfig, ProcessingConfig } from '../config/environments';
 
 export interface BedrockStackProps extends cdk.StackProps {
   stage: string;
@@ -152,8 +152,8 @@ export class BedrockStack extends cdk.Stack {
         chunkingConfiguration: {
           chunkingStrategy: 'FIXED_SIZE',
           fixedSizeChunkingConfiguration: {
-            maxTokens: 512,
-            overlapPercentage: 20,
+            maxTokens: ProcessingConfig.chunking.maxTokens,
+            overlapPercentage: ProcessingConfig.chunking.overlapPercentage,
           },
         },
       },
