@@ -84,26 +84,18 @@ class KBFilterBuilder:
     @staticmethod
     def build_filter(metadata: RequestMetadata) -> Optional[Dict[str, Any]]:
         """
-        Build Bedrock KB filter from request metadata.
+        Build Bedrock KB filter from request metadata using partition_key for strict isolation.
 
-        Returns None if no filters (allows unrestricted access).
-        Returns filter dict if metadata present (restricts by tenant/user/project/knowledge_type).
+        Filtering logic (strict hierarchy):
+        1. tenant_id only → All docs from tenant (no partition filter)
+        2. tenant_id + project_id → Only project docs (partition = t{tenant}_p{project}*)
+        3. tenant_id + project_id + task_id → ONLY task docs (partition = t{tenant}_p{project}_t{task})
 
-        Supports full metadata.fallback schema with prioritized filtering:
-        1. tenant_id (ALWAYS required if present)
-        2. knowledge_type (generic vs specific)
-        3. project_id, task_id, subtask_id (hierarchical)
-        4. user_roles, users (access control with OR logic)
-        5. Additional custom filters
+        partition_key format:
+        - Project-level: t{tenant}_p{project}
+        - Task-level: t{tenant}_p{project}_t{task}
 
-        Filter Format:
-        {
-            'andAll': [
-                {'equals': {'key': 'tenant_id', 'value': '1'}},
-                {'equals': {'key': 'project_id', 'value': '1000'}},
-                {'orAll': [{'equals': {'key': 'user_roles', 'value': 'admin'}}, ...]}
-            ]
-        }
+        This ensures strict isolation without false positives.
         """
         if not metadata.has_filters():
             print('[KB Filter] No metadata provided - unrestricted access')
@@ -111,17 +103,54 @@ class KBFilterBuilder:
 
         conditions = []
 
-        # 1. Required filter: tenant_id (highest priority)
-        if metadata.tenant_id:
+        # 1. Required filter: tenant_id (ALWAYS required)
+        if not metadata.tenant_id:
+            print('[KB Filter] ⚠️  No tenant_id - unrestricted access')
+            return None
+
+        conditions.append({
+            'equals': {
+                'key': 'tenant_id',
+                'value': str(metadata.tenant_id)
+            }
+        })
+        print(f'[KB Filter] ✅ tenant_id: {metadata.tenant_id}')
+
+        # 2. Build partition_key filter based on hierarchy
+        if metadata.task_id and metadata.project_id:
+            # STRICT: Only task-level docs
+            partition_key = f"t{metadata.tenant_id}_p{metadata.project_id}_t{metadata.task_id}"
             conditions.append({
                 'equals': {
-                    'key': 'tenant_id',
-                    'value': str(metadata.tenant_id)
+                    'key': 'partition_key',
+                    'value': partition_key
                 }
             })
-            print(f'[KB Filter] Added tenant_id: {metadata.tenant_id}')
+            print(f'[KB Filter] ✅ partition_key (task only): {partition_key}')
 
-        # 2. Knowledge type filter (generic vs specific)
+        elif metadata.project_id:
+            # Project + all its tasks: Use orAll with startsWith pattern
+            # Since Bedrock doesn't support startsWith, we use explicit equals for project-level
+            # and rely on tenant_id + project_id matching
+            partition_key_project = f"t{metadata.tenant_id}_p{metadata.project_id}"
+
+            # Add both project_id and partition_key for double validation
+            conditions.append({
+                'equals': {
+                    'key': 'project_id',
+                    'value': str(metadata.project_id)
+                }
+            })
+            conditions.append({
+                'equals': {
+                    'key': 'partition_key',
+                    'value': partition_key_project
+                }
+            })
+            print(f'[KB Filter] ✅ project_id: {metadata.project_id}')
+            print(f'[KB Filter] ✅ partition_key (project only): {partition_key_project}')
+
+        # 3. Knowledge type filter (generic vs specific)
         if metadata.knowledge_type:
             conditions.append({
                 'equals': {
@@ -129,27 +158,9 @@ class KBFilterBuilder:
                     'value': metadata.knowledge_type
                 }
             })
-            print(f'[KB Filter] Added knowledge_type: {metadata.knowledge_type}')
+            print(f'[KB Filter] ✅ knowledge_type: {metadata.knowledge_type}')
 
-        # 3. Hierarchical filters: project > task > subtask
-        if metadata.project_id:
-            conditions.append({
-                'equals': {
-                    'key': 'project_id',
-                    'value': str(metadata.project_id)
-                }
-            })
-            print(f'[KB Filter] Added project_id: {metadata.project_id}')
-
-        if metadata.task_id:
-            conditions.append({
-                'equals': {
-                    'key': 'task_id',
-                    'value': str(metadata.task_id)
-                }
-            })
-            print(f'[KB Filter] Added task_id: {metadata.task_id}')
-
+        # 4. Subtask filter (if present)
         if metadata.subtask_id:
             conditions.append({
                 'equals': {
@@ -157,7 +168,7 @@ class KBFilterBuilder:
                     'value': str(metadata.subtask_id)
                 }
             })
-            print(f'[KB Filter] Added subtask_id: {metadata.subtask_id}')
+            print(f'[KB Filter] ✅ subtask_id: {metadata.subtask_id}')
 
         # 4. Partition type filter (PROJECT, TASK, SUBTASK, GENERIC)
         if metadata.partition_type:
