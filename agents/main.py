@@ -46,13 +46,16 @@ def remove_thinking_tags(text: str) -> str:
 
 # Create agent with inference profile ID (Strands automatically detects Bedrock models)
 # Pass the full inference profile ID (with us. prefix) for on-demand throughput
+# Store filter globally for tool access
+_kb_filter_for_tools: Optional[Dict[str, Any]] = None
+
 agent = Agent(
     model=MODEL_ID,
     tools=[retrieve, http_request],
     system_prompt="""Eres un asistente conversacional amigable y útil. Mantienes el contexto de la conversación y recuerdas lo que el usuario te ha dicho.
 
 **Herramientas:**
-- `retrieve`: Busca en la base de conocimiento empresarial cuando necesites información específica
+- `retrieve`: Busca en la base de conocimiento empresarial. IMPORTANTE: Si hay un filtro activo, SIEMPRE incluye el parámetro `retrieveFilter` en cada llamada.
 - `http_request`: Obtiene contenido de URLs cuando sea necesario
 
 **Comportamiento:**
@@ -61,6 +64,9 @@ agent = Agent(
 - Para conversación general, responde directamente sin buscar
 - Sé conciso pero amigable
 - Si no sabes algo o no está en tu conocimiento, dilo claramente
+
+**CRÍTICO para retrieve:**
+Cuando uses `retrieve` y haya metadata de filtrado disponible, DEBES incluir el parámetro `retrieveFilter` exactamente como se te indica en el prompt.
 
 Responde en español de forma natural y conversacional."""
 )
@@ -108,20 +114,29 @@ async def invocations_endpoint(request: Request):
 
         async def generate():
             try:
-                # Set KB filter in environment if present
-                global _CURRENT_KB_FILTER
-                if _CURRENT_KB_FILTER and DEBUG:
-                    print(f'[Filter] Applying: {json.dumps(_CURRENT_KB_FILTER)}')
+                # Set KB filter for tools
+                global _CURRENT_KB_FILTER, _kb_filter_for_tools
+                _kb_filter_for_tools = _CURRENT_KB_FILTER
 
-                # Build enhanced prompt with conversation context and metadata filter
+                if _CURRENT_KB_FILTER:
+                    print(f'[Filter] Active metadata filter: {json.dumps(_CURRENT_KB_FILTER)}')
+
+                # Build enhanced prompt with conversation context
                 enhanced_prompt = input_text
 
                 if conversation_context:
                     enhanced_prompt = f"Contexto de conversación reciente:\n{conversation_context}\nUsuario actual: {input_text}"
 
+                # Add filter instructions if present
                 if _CURRENT_KB_FILTER:
-                    enhanced_prompt += f"""\n\nIMPORTANTE: Si usas 'retrieve', incluye el parámetro 'retrieveFilter':
-{json.dumps(_CURRENT_KB_FILTER, indent=2)}"""
+                    filter_json = json.dumps(_CURRENT_KB_FILTER, indent=2)
+                    enhanced_prompt += f"""
+
+METADATA FILTERING ACTIVA:
+Cuando uses la herramienta 'retrieve', DEBES incluir este parámetro exacto:
+retrieveFilter={filter_json}
+
+Esto filtrará los resultados según los permisos del usuario. NO omitas este parámetro."""
 
                 # Call agent with context
                 result = agent(enhanced_prompt)

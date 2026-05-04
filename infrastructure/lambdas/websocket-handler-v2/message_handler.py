@@ -45,8 +45,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     )
 
     try:
-        # Parse message body
-        body = json.loads(event.get('body', '{}'))
+        # Parse message body - handle {action, data} structure
+        raw_body = json.loads(event.get('body', '{}'))
+
+        # Check if it's wrapped in data object (websocket format)
+        if 'data' in raw_body and isinstance(raw_body['data'], dict):
+            body = raw_body['data']
+        else:
+            body = raw_body
+
         question = body.get('question') or body.get('inputText') or body.get('prompt', 'Hello')
         session_id = body.get('sessionId', str(uuid.uuid4()))
 
