@@ -1,46 +1,38 @@
 """
-ProcessApp Agent - Simplified Bedrock Agent with Strand SDK
+ProcessApp Agent - Simplified Bedrock Agent with Strand SDK + retrieve tool
 """
 
 import os
 import json
-import boto3
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
-from strands import Agent, tool
-from strands_tools import http_request
+from strands import Agent
+from strands_tools import retrieve, http_request
 import uvicorn
-from pathlib import Path
 from typing import Optional, Dict, Any
 
 # Environment variables
 KB_ID = os.environ.get('KB_ID', '')
-MODEL_ID = os.environ.get('MODEL_ID', 'anthropic.claude-3-5-sonnet-20241022-v2:0')
+# CRITICAL: Set KNOWLEDGE_BASE_ID for Strand's retrieve tool
+os.environ['KNOWLEDGE_BASE_ID'] = KB_ID
+
+MODEL_ID = os.environ.get('MODEL_ID', 'amazon.nova-pro-v1:0')
 REGION = os.environ.get('AWS_REGION', 'us-east-1')
 PORT = int(os.environ.get('PORT', '8080'))
+DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
 
-print('🚀 ProcessApp Agent (Strand SDK)')
-print(f'   Model: {MODEL_ID}')
-print(f'   KB: {KB_ID or "Not configured"}')
+# Set AWS_REGION for Bedrock (required by strands)
+os.environ['AWS_REGION'] = REGION
 
-# Initialize AWS clients
-bedrock_runtime = boto3.client('bedrock-agent-runtime', region_name=REGION)
+print('🚀 ProcessApp Agent (Strand SDK + Bedrock)')
+print(f'   Model/Inference Profile: {MODEL_ID}')
+print(f'   Region: {REGION}')
+print(f'   KB: {KB_ID[:20]}...' if len(KB_ID) > 20 else f'   KB: {KB_ID or "Not configured"}')
 
-# Module-level variable for KB filter
+# Module-level variable for KB filter (for metadata filtering)
 _CURRENT_KB_FILTER: Optional[Dict[str, Any]] = None
 
-# Load normative framework (keep first 2000 chars only)
-NORMATIVE_FRAMEWORK_PATH = Path(__file__).parent / 'marco_normativo_colpensiones.md'
-NORMATIVE_FRAMEWORK = ""
-try:
-    if NORMATIVE_FRAMEWORK_PATH.exists():
-        full_content = NORMATIVE_FRAMEWORK_PATH.read_text(encoding='utf-8')
-        NORMATIVE_FRAMEWORK = full_content[:2000]  # Truncate at load time
-        print(f'✅ Loaded normative framework: {len(NORMATIVE_FRAMEWORK)} chars')
-except Exception as e:
-    print(f'⚠️  Error loading framework: {e}')
-
-# Session storage (simple dict, no complex management)
+# Session storage
 _sessions: Dict[str, list] = {}
 
 
@@ -52,98 +44,27 @@ def remove_thinking_tags(text: str) -> str:
     return cleaned.strip()
 
 
-# Tools
-@tool
-def search_knowledge_base(query: str) -> str:
-    """Search ProcessApp knowledge base with metadata filters."""
-    if not KB_ID:
-        print("[KB] Not configured")
-        return "No hay información disponible en este momento."
-
-    try:
-        print(f'[KB] Query: {query[:50]}...')
-
-        config = {'vectorSearchConfiguration': {'numberOfResults': 2}}
-
-        global _CURRENT_KB_FILTER
-        if _CURRENT_KB_FILTER:
-            config['vectorSearchConfiguration']['filter'] = _CURRENT_KB_FILTER
-
-        response = bedrock_runtime.retrieve(
-            knowledgeBaseId=KB_ID,
-            retrievalQuery={'text': query},
-            retrievalConfiguration=config
-        )
-
-        results = []
-        for r in response.get('retrievalResults', []):
-            content = r.get('content', {}).get('text', '')
-            if content:
-                results.append(content[:1000])  # Limit each result
-
-        if results:
-            print(f'[KB] Found {len(results)} results')
-            return "\n\n---\n\n".join(results)
-
-        print("[KB] No results")
-        return "No encontré información relevante en la base de conocimiento."
-
-    except Exception as e:
-        print(f'[KB] Error: {e}')
-        return "No pude acceder a la base de conocimiento en este momento."
-
-
-
-
-@tool
-def consult_normative_document(query: str) -> str:
-    """Consulta normativa pensional colombiana (leyes, decretos)."""
-    print(f'[Normative] Query: {query[:50]}...')
-
-    if not NORMATIVE_FRAMEWORK:
-        print("[Normative] Framework not loaded")
-        return "El índice normativo no está disponible. Puedo intentar ayudarte de otra manera."
-
-    return f"""**Índice normativo sobre:** {query}
-
-{NORMATIVE_FRAMEWORK}
-
-**Instrucciones:** Busca el documento relevante en el índice anterior y proporciona al usuario la información en formato Markdown con las URLs oficiales."""
-
-
-# Create agent with simple system prompt
+# Create agent with inference profile ID (Strands automatically detects Bedrock models)
+# Pass the full inference profile ID (with us. prefix) for on-demand throughput
 agent = Agent(
-    model=MODEL_ID,
-    tools=[search_knowledge_base, consult_normative_document, http_request],
-    system_prompt="""Eres un asistente experto en normativa pensional colombiana (Colpensiones).
+    model=MODEL_ID,  # us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    tools=[retrieve, http_request],
+    system_prompt="""Eres un asistente que responde preguntas sobre información empresarial y normativa.
 
-**Herramientas:**
-- `consult_normative_document`: Índice de leyes/decretos/jurisprudencia
-- `search_knowledge_base`: Base de conocimiento ProcessApp
-- `http_request`: Obtener contenido de URLs oficiales
+**Herramientas disponibles:**
+- `retrieve`: Busca información en la base de conocimiento. Usa esta herramienta cuando el usuario haga preguntas sobre información, documentos, o datos específicos.
+- `http_request`: Obtiene contenido de URLs oficiales
 
-**Protocolo:**
-1. Para preguntas sobre normativa: usa `consult_normative_document` primero
-2. Proporciona siempre: nombre del documento, año, URL oficial, resumen
-3. Responde en Markdown bien formateado (encabezados ##, listas -, negritas **, emojis 📋🔗⚠️)
+**Cuándo usar retrieve:**
+- Usuario pregunta sobre información específica
+- Usuario busca documentos o datos
+- Usuario pide explicaciones o resúmenes
 
-**Ejemplo de respuesta:**
+**Cuándo NO usar retrieve:**
+- Saludos simples ("Hola", "Buenos días")
+- Preguntas generales que no requieren búsqueda
 
-## Decreto 1558 de 2024 - Ahorro Individual
-
-**Tema:** Ahorro voluntario complementario en la reforma pensional
-
-**Puntos clave:**
-- Reglamenta el componente de ahorro voluntario
-- Establece requisitos para administradoras
-- Define condiciones de retiro
-
-**Consultar:**
-- 🔗 [Función Pública](https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=247845)
-
----
-
-**Tono:** Profesional y claro. Recuerda el contexto de la conversación actual."""
+Responde en español de forma clara y profesional."""
 )
 
 # FastAPI app
@@ -157,7 +78,8 @@ async def invocations_endpoint(request: Request):
         input_text = body.get('inputText') or body.get('prompt') or body.get('question') or 'Hola'
         session_id = body.get('sessionId', 'default')
 
-        print(f'[Request] {input_text[:80]}... (session: {session_id})')
+        if DEBUG:
+            print(f'[Request] {input_text[:80]}... (session: {session_id})')
 
         # Set KB filter from metadata
         try:
@@ -167,7 +89,8 @@ async def invocations_endpoint(request: Request):
             global _CURRENT_KB_FILTER
             _CURRENT_KB_FILTER = kb_filter
         except Exception as e:
-            print(f'[Metadata] Error: {e}')
+            if DEBUG:
+                print(f'[Metadata] Error: {e}')
 
         # Get session history (simple: keep last 4 messages)
         if session_id not in _sessions:
@@ -178,8 +101,24 @@ async def invocations_endpoint(request: Request):
 
         async def generate():
             try:
-                # Call agent
-                result = agent(input_text)
+                # Set KB filter in environment if present
+                global _CURRENT_KB_FILTER
+                if _CURRENT_KB_FILTER and DEBUG:
+                    print(f'[Filter] Applying: {json.dumps(_CURRENT_KB_FILTER)}')
+
+                # Build enhanced prompt with filter instructions if filter exists
+                if _CURRENT_KB_FILTER:
+                    enhanced_prompt = f"""{input_text}
+
+IMPORTANTE: Cuando uses la herramienta 'retrieve', debes incluir el parámetro 'retrieveFilter' con este valor exacto:
+{json.dumps(_CURRENT_KB_FILTER, indent=2)}
+
+Esto filtrará los resultados según los permisos del usuario."""
+                else:
+                    enhanced_prompt = input_text
+
+                # Call agent (it will use retrieve tool automatically if needed)
+                result = agent(enhanced_prompt)
 
                 # Extract response
                 response_text = ""
@@ -192,20 +131,20 @@ async def invocations_endpoint(request: Request):
                 else:
                     response_text = str(result)
 
-                # Remove thinking tags before sending to user
+                # Remove thinking tags
                 response_text = remove_thinking_tags(response_text)
 
-                # Limit response size
+                # Limit size
                 if len(response_text) > 4000:
-                    response_text = response_text[:4000] + "\n\n[Respuesta truncada por límite de tokens]"
-                    print(f'[Response] Truncated to 4000 chars')
+                    response_text = response_text[:4000]
 
-                print(f'[Response] {len(response_text)} chars')
+                if DEBUG:
+                    print(f'[Response] {len(response_text)} chars')
 
                 # Store in session
                 _sessions[session_id].append({'role': 'assistant', 'content': response_text[:200]})
 
-                # Stream response with smaller chunks (3 words at a time for lower latency)
+                # Stream response
                 words = response_text.split()
                 for i in range(0, len(words), 3):
                     chunk = " ".join(words[i:i+3]) + " "
@@ -218,10 +157,9 @@ async def invocations_endpoint(request: Request):
                 import traceback
                 traceback.print_exc()
 
-                # User-friendly error, log full details
                 yield json.dumps({
                     "type": "chunk",
-                    "data": "Disculpa, tuve un problema procesando tu pregunta. ¿Puedes intentarlo de nuevo?"
+                    "data": "Disculpa, tuve un problema procesando tu pregunta."
                 }) + "\n"
                 yield json.dumps({"type": "complete", "sessionId": session_id}) + "\n"
             finally:
@@ -242,15 +180,18 @@ async def health_endpoint():
     return {
         "status": "healthy",
         "model": MODEL_ID,
-        "tools": ["search_knowledge_base", "consult_normative_document", "http_request"],
-        "framework_loaded": bool(NORMATIVE_FRAMEWORK),
+        "region": REGION,
+        "kb_id": KB_ID,
+        "tools": ["retrieve", "http_request"],
+        "provider": "bedrock",
         "sessions": len(_sessions)
     }
 
 if __name__ == '__main__':
-    print(f'✅ Starting ProcessApp Agent on port {PORT}')
-    print(f'   Model: {MODEL_ID}')
-    print(f'   Tools: search_knowledge_base, consult_normative_document, http_request')
-    print(f'   Framework: {"✅" if NORMATIVE_FRAMEWORK else "❌"}')
+    print(f'✅ Agent ready on port {PORT}')
+    if DEBUG:
+        print(f'   Model: {MODEL_ID}')
+        print(f'   KB ID: {KB_ID}')
+        print(f'   Tools: retrieve, http_request')
 
-    uvicorn.run(app, host='0.0.0.0', port=PORT, log_level='info')
+    uvicorn.run(app, host='0.0.0.0', port=PORT, log_level='warning')

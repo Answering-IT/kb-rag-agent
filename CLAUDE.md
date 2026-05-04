@@ -85,7 +85,8 @@ CDK deploys 9 stacks with strict dependencies (defined in `infrastructure/bin/ap
 
 **Agent V2 (ACTIVE - infrastructure/lib/AgentStackV2.ts):**
 - Uses `@aws-cdk/aws-bedrock-agentcore-alpha` (Agent Core Runtime)
-- Custom Python agent in `agents/main.py` using Strand SDK (~259 lines, optimized for simplicity)
+- Model: Amazon Nova Pro (`amazon.nova-pro-v1:0`) - set via `MODEL_ID` environment variable
+- Custom Python agent in `agents/main.py` using Strand SDK (256 lines, optimized for simplicity)
 - Specialized for Colombian pension regulations (Colpensiones)
 - Tools: `search_knowledge_base`, `consult_normative_document`, `http_request`
 - FastAPI server in Docker container
@@ -135,6 +136,11 @@ S3 Upload → OCR Lambda (if image/PDF) → Bedrock KB Sync → Chunking/Embeddi
 - **Lines 382-393:** Multi-tenancy config (metadata filtering enabled)
 
 **Key Insight:** Multi-tenancy is implemented via S3 object metadata (`x-amz-meta-*` headers), not separate buckets.
+
+**Model Assignment Flow:**
+- `environments.ts:234` defines `AgentConfig.foundationModel = 'amazon.nova-pro-v1:0'`
+- `AgentStackV2.ts:162` passes this to Agent V2 runtime as `MODEL_ID` environment variable
+- `agents/main.py:18` has fallback to Claude 3.5 Sonnet (unused in deployment, only for local dev without env vars)
 
 ### CDK Entry Point: `infrastructure/bin/app.ts`
 
@@ -553,7 +559,7 @@ cd fe && npm run dev
 | `infrastructure/bin/app.ts` | CDK entry point, stack orchestration | 112-123 (Agent V2) |
 | `infrastructure/config/environments.ts` | All configuration | 20 (profile), 40-50 (models), 90-95 (chunking) |
 | `infrastructure/lib/AgentStackV2.ts` | Agent V2 CDK stack | Entire file |
-| `agents/main.py` | Agent V2 implementation | Entire file |
+| `agents/main.py` | Agent V2 implementation (256 lines) | 18 (MODEL_ID fallback), 38 (framework truncation), 210 (streaming chunks) |
 | `infrastructure/lambdas/ocr-processor/index.py` | OCR Lambda | Entire file |
 | **Frontend** |
 | `fe/lib/translations.ts` | Translation strings (ES/EN) and version | 5 (APP_VERSION), 19-46 (translations) |

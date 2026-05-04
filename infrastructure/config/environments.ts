@@ -230,7 +230,7 @@ Content Safety:
 
 Remember: Your knowledge comes from the documents in the knowledge base. Always ground your responses in the actual content available.`,
 
-  // Foundation model (using Amazon Nova Pro - confirmed active)
+  // Foundation model (using Amazon Nova Pro - available without marketplace subscription)
   foundationModel: 'amazon.nova-pro-v1:0',
 
   // Session configuration
