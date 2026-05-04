@@ -135,8 +135,8 @@ export function useWebSocketChat(config: WebSocketChatConfig = {}): UseWebSocket
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('[WebSocketChat] Error:', error);
+      ws.onerror = (event: Event) => {
+        console.error('[WebSocketChat] WebSocket error occurred');
       };
 
       wsRef.current = ws;
@@ -169,7 +169,6 @@ export function useWebSocketChat(config: WebSocketChatConfig = {}): UseWebSocket
         }
       };
 
-      console.log('[WebSocketChat] Sending message with metadata:', payload);
       wsRef.current.send(JSON.stringify(payload));
     }
   }, [isLoading, isConnected, sessionId, metadata, onMessageSent]);
