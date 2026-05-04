@@ -24,10 +24,7 @@ DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
 # Set AWS_REGION for Bedrock (required by strands)
 os.environ['AWS_REGION'] = REGION
 
-print('🚀 ProcessApp Agent (Strand SDK + Bedrock)')
-print(f'   Model/Inference Profile: {MODEL_ID}')
-print(f'   Region: {REGION}')
-print(f'   KB: {KB_ID[:20]}...' if len(KB_ID) > 20 else f'   KB: {KB_ID or "Not configured"}')
+print(f'🚀 ProcessApp Agent - {MODEL_ID}')
 
 # Module-level variable for KB filter (for metadata filtering)
 _CURRENT_KB_FILTER: Optional[Dict[str, Any]] = None
@@ -116,8 +113,6 @@ async def invocations_endpoint(request: Request):
         input_text = body.get('inputText') or body.get('prompt') or body.get('question') or 'Hola'
         session_id = body.get('sessionId', 'default')
 
-        if DEBUG:
-            print(f'[Agent] Request: {input_text[:80]}... (session: {session_id})')
 
         # Set KB filter from metadata
         try:
@@ -127,14 +122,9 @@ async def invocations_endpoint(request: Request):
             global _CURRENT_KB_FILTER
             _CURRENT_KB_FILTER = kb_filter
 
-            if DEBUG and kb_filter:
-                print(f'[Agent] KB Filter: tenant={metadata.tenant_id}, project={metadata.project_id}, task={metadata.task_id}')
 
         except Exception as e:
-            print(f'[Agent] Metadata error: {e}')
-            if DEBUG:
-                import traceback
-                traceback.print_exc()
+            print(f'Metadata error: {e}')
 
         # Get session history (keep last 6 messages for better context)
         if session_id not in _sessions:
@@ -199,9 +189,6 @@ Esto filtrará los resultados según los permisos del usuario. NO omitas este pa
                 if len(response_text) > 4000:
                     response_text = response_text[:4000]
 
-                if DEBUG:
-                    print(f'[Response] {len(response_text)} chars')
-
                 # Store full response in session for context
                 _sessions[session_id].append({'role': 'assistant', 'content': response_text})
 
@@ -250,9 +237,4 @@ async def health_endpoint():
 
 if __name__ == '__main__':
     print(f'✅ Agent ready on port {PORT}')
-    if DEBUG:
-        print(f'   Model: {MODEL_ID}')
-        print(f'   KB ID: {KB_ID}')
-        print(f'   Tools: retrieve, http_request')
-
     uvicorn.run(app, host='0.0.0.0', port=PORT, log_level='warning')
