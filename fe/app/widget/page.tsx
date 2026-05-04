@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Chat } from '@/components/chat';
 import { StreamingChatConfig } from '@/hooks/useStreamingChat';
 import { getTranslations } from '@/lib/translations';
+import { useMetadata } from '@/contexts/MetadataContext';
 
 interface WidgetMessage {
   type: 'INIT' | 'SEND_MESSAGE';
@@ -22,6 +23,7 @@ interface WidgetMessage {
  */
 export default function WidgetPage() {
   const t = getTranslations();
+  const { setMetadata } = useMetadata(); // Get metadata setter from context
   const [config, setConfig] = useState<StreamingChatConfig | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -106,6 +108,12 @@ export default function WidgetPage() {
         setConfig(newConfig);
         setIsReady(true);
 
+        // Store metadata in context for persistence across messages
+        if (initData.metadata) {
+          console.log('[Widget] Storing metadata in context:', initData.metadata);
+          setMetadata(initData.metadata);
+        }
+
         // Notify parent that widget is ready
         window.parent.postMessage(
           {
@@ -114,6 +122,15 @@ export default function WidgetPage() {
           },
           '*' // TODO: Replace with specific origin in production
         );
+      } else if (event.data.type === 'UPDATE_METADATA') {
+        // 🆕 Handle dynamic metadata updates from parent (route changes)
+        console.log('[Widget] Received UPDATE_METADATA message');
+        const updateData = event.data.data || {};
+
+        if (updateData.metadata) {
+          console.log('[Widget] Updating metadata in context:', updateData.metadata);
+          setMetadata(updateData.metadata);
+        }
       }
     };
 

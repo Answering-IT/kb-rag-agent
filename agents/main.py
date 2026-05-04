@@ -4,12 +4,22 @@ ProcessApp Agent - Simplified Bedrock Agent with Strand SDK + retrieve tool
 
 import os
 import json
+import logging
+import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from strands import Agent
 from strands_tools import retrieve, http_request
 import uvicorn
 from typing import Optional, Dict, Any
+
+# Configure logging to stdout (captured by Bedrock Agent Core Runtime)
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 # Environment variables
 KB_ID = os.environ.get('KB_ID', '')
@@ -24,7 +34,9 @@ DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
 # Set AWS_REGION for Bedrock (required by strands)
 os.environ['AWS_REGION'] = REGION
 
-print(f'🚀 ProcessApp Agent - {MODEL_ID}')
+logger.info(f'🚀 ProcessApp Agent - {MODEL_ID}')
+logger.info(f'📚 Knowledge Base ID: {KB_ID}')
+logger.info(f'🌍 Region: {REGION}')
 
 # Module-level variable for KB filter (for metadata filtering)
 _CURRENT_KB_FILTER: Optional[Dict[str, Any]] = None
@@ -117,14 +129,27 @@ async def invocations_endpoint(request: Request):
         # Set KB filter from metadata
         try:
             from metadata_handler import KBFilterBuilder
-            metadata = KBFilterBuilder.extract_from_request(dict(request.headers), body)
+
+            # Extract metadata from request
+            headers_dict = dict(request.headers)
+            metadata = KBFilterBuilder.extract_from_request(headers_dict, body)
+
+            # Log incoming request (essential info only)
+            logger.info(f'[Request] Input: "{input_text}", Session: {session_id}')
+            logger.info(f'[Metadata] Extracted: {json.dumps(metadata.to_dict(), indent=2)}')
+
+            # Build filter
             kb_filter = KBFilterBuilder.build_filter(metadata)
+            logger.info(f'[KB Filter] {json.dumps(kb_filter, indent=2) if kb_filter else "No filter (unrestricted access)"}')
+
             global _CURRENT_KB_FILTER
             _CURRENT_KB_FILTER = kb_filter
 
 
         except Exception as e:
-            print(f'Metadata error: {e}')
+            logger.error(f'[Metadata] Error: {e}')
+            import traceback
+            traceback.print_exc()
 
         # Get session history (keep last 6 messages for better context)
         if session_id not in _sessions:
@@ -147,9 +172,6 @@ async def invocations_endpoint(request: Request):
                 # Set KB filter for tools
                 global _CURRENT_KB_FILTER, _kb_filter_for_tools
                 _kb_filter_for_tools = _CURRENT_KB_FILTER
-
-                if _CURRENT_KB_FILTER:
-                    print(f'[Filter] Active metadata filter: {json.dumps(_CURRENT_KB_FILTER)}')
 
                 # Build enhanced prompt with conversation context
                 enhanced_prompt = input_text
@@ -201,7 +223,7 @@ Esto filtrará los resultados según los permisos del usuario. NO omitas este pa
                 yield json.dumps({"type": "complete", "sessionId": session_id}) + "\n"
 
             except Exception as e:
-                print(f'[Error] {e}')
+                logger.error(f'[Error] Processing request: {e}')
                 import traceback
                 traceback.print_exc()
 
@@ -216,7 +238,7 @@ Esto filtrará los resultados según los permisos del usuario. NO omitas este pa
         return StreamingResponse(generate(), media_type="application/x-ndjson")
 
     except Exception as e:
-        print(f'[Error] Endpoint: {e}')
+        logger.error(f'[Error] Endpoint: {e}')
         return JSONResponse({"error": "Error procesando solicitud"}, status_code=500)
 
 
@@ -236,5 +258,5 @@ async def health_endpoint():
     }
 
 if __name__ == '__main__':
-    print(f'✅ Agent ready on port {PORT}')
+    logger.info(f'✅ Agent ready on port {PORT}')
     uvicorn.run(app, host='0.0.0.0', port=PORT, log_level='warning')

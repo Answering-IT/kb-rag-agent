@@ -63,39 +63,43 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Pad with zeros to reach 33 characters (deterministic)
             session_id = session_id + ('-' * (33 - len(session_id)))
 
+        # Extract metadata object from body (NEW: preferred location)
+        metadata_obj = body.get('metadata', {})
+
+        print(f'[Handler] Body keys: {list(body.keys())}')
+        print(f'[Handler] Metadata object: {metadata_obj}')
+
         # Extract metadata for KB filtering (snake_case for AWS Bedrock)
+        # Priority: metadata object > root level body fields
         # Core identifiers
-        tenant_id = body.get('tenant_id') or body.get('tenantId')
-        project_id = body.get('project_id') or body.get('projectId')
-        task_id = body.get('task_id') or body.get('taskId')
-        subtask_id = body.get('subtask_id') or body.get('subtaskId')
+        tenant_id = metadata_obj.get('tenant_id') or metadata_obj.get('tenantId') or body.get('tenant_id') or body.get('tenantId')
+        project_id = metadata_obj.get('project_id') or metadata_obj.get('projectId') or body.get('project_id') or body.get('projectId')
+        task_id = metadata_obj.get('task_id') or metadata_obj.get('taskId') or body.get('task_id') or body.get('taskId')
+        subtask_id = metadata_obj.get('subtask_id') or metadata_obj.get('subtaskId') or body.get('subtask_id') or body.get('subtaskId')
 
         # Access control
-        user_id = body.get('user_id') or body.get('userId')
-        user_roles = body.get('user_roles') or body.get('roles') or body.get('userRoles')
-        users = body.get('users')
-        team_ids = body.get('team_ids') or body.get('teamIds')
+        user_id = metadata_obj.get('user_id') or metadata_obj.get('userId') or body.get('user_id') or body.get('userId')
+        user_roles = metadata_obj.get('user_roles') or metadata_obj.get('userRoles') or body.get('user_roles') or body.get('roles') or body.get('userRoles')
+        users = metadata_obj.get('users') or body.get('users')
+        team_ids = metadata_obj.get('team_ids') or metadata_obj.get('teamIds') or body.get('team_ids') or body.get('teamIds')
 
         # Knowledge classification
-        knowledge_type = body.get('knowledge_type') or body.get('knowledgeType')
+        knowledge_type = metadata_obj.get('knowledge_type') or metadata_obj.get('knowledgeType') or body.get('knowledge_type') or body.get('knowledgeType')
 
         # Document metadata
-        attachment_id = body.get('attachment_id') or body.get('attachmentId')
-        attachment_type = body.get('attachment_type') or body.get('attachmentType')
-        org_document_type = body.get('org_document_type') or body.get('orgDocumentType')
-        org_document_sub_type = body.get('org_document_sub_type') or body.get('orgDocumentSubType')
-        partition_type = body.get('partition_type') or body.get('partitionType')
+        attachment_id = metadata_obj.get('attachment_id') or metadata_obj.get('attachmentId') or body.get('attachment_id') or body.get('attachmentId')
+        attachment_type = metadata_obj.get('attachment_type') or metadata_obj.get('attachmentType') or body.get('attachment_type') or body.get('attachmentType')
+        org_document_type = metadata_obj.get('org_document_type') or metadata_obj.get('orgDocumentType') or body.get('org_document_type') or body.get('orgDocumentType')
+        org_document_sub_type = metadata_obj.get('org_document_sub_type') or metadata_obj.get('orgDocumentSubType') or body.get('org_document_sub_type') or body.get('orgDocumentSubType')
+        partition_type = metadata_obj.get('partition_type') or metadata_obj.get('partitionType') or body.get('partition_type') or body.get('partitionType')
 
         # Complex fields
-        task_names = body.get('task_names') or body.get('taskNames')
-        user_access_chain = body.get('user_access_chain') or body.get('userAccessChain')
-
-        # Additional custom filters
-        metadata = body.get('metadata', {})
+        task_names = metadata_obj.get('task_names') or metadata_obj.get('taskNames') or body.get('task_names') or body.get('taskNames')
+        user_access_chain = metadata_obj.get('user_access_chain') or metadata_obj.get('userAccessChain') or body.get('user_access_chain') or body.get('userAccessChain')
 
         print(f'[Handler] Question: {question}')
         print(f'[Handler] Session: {session_id}')
-        print(f'[Handler] Metadata: tenant={tenant_id}, project={project_id}, task={task_id}, '
+        print(f'[Handler] Extracted Metadata: tenant={tenant_id}, project={project_id}, task={task_id}, '
               f'knowledge_type={knowledge_type}, partition={partition_type}, roles={user_roles}')
 
         # Send acknowledgment
@@ -163,12 +167,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if user_access_chain:
             payload_data['user_access_chain'] = user_access_chain
 
-        # Additional custom filters
-        if metadata:
-            payload_data['metadata'] = metadata
+        # Pass the metadata object (contains extra fields like userAgent, timestamp, etc.)
+        if metadata_obj and len(metadata_obj) > 0:
+            payload_data['metadata'] = metadata_obj
 
         payload = json.dumps(payload_data).encode('utf-8')
         print(f'[Handler] Payload keys: {list(payload_data.keys())}')
+        print(f'[Handler] Payload metadata object: {payload_data.get("metadata", {})}')
 
         try:
             # Invoke Agent Core Runtime via AWS SDK

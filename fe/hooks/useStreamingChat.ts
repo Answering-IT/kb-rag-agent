@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { useMetadata } from '@/contexts/MetadataContext';
 
 interface Message {
   id: string;
@@ -13,7 +14,7 @@ export interface StreamingChatConfig {
   userId?: string;
   sessionId?: string;
   headers?: Record<string, string>;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>; // Direct metadata (merged with context metadata)
   onMessageSent?: (message: Message) => void;
   onMessageReceived?: (message: Message) => void;
   onConnectionChange?: (connected: boolean) => void;
@@ -36,11 +37,17 @@ export function useStreamingChat(config: StreamingChatConfig = {}): UseStreaming
     userId,
     sessionId: externalSessionId,
     headers = {},
-    metadata = {},
+    metadata: configMetadata = {}, // Renamed to avoid conflict
     onMessageSent,
     onMessageReceived,
     onConnectionChange,
   } = config;
+
+  // Use metadata from context (persistent across messages)
+  const { metadata: contextMetadata } = useMetadata();
+
+  // Merge: context metadata takes precedence, fallback to config metadata
+  const metadata = { ...configMetadata, ...contextMetadata };
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -78,9 +85,14 @@ export function useStreamingChat(config: StreamingChatConfig = {}): UseStreaming
       if (authToken) requestBody.authToken = authToken;
       if (userId) requestBody.userId = userId;
       if (Object.keys(headers).length > 0) requestBody.headers = headers;
-      if (Object.keys(metadata).length > 0) requestBody.metadata = metadata;
+
+      // Add persistent metadata as separate object
+      if (Object.keys(metadata).length > 0) {
+        requestBody.metadata = metadata;
+      }
 
       console.log('[StreamingChat] Sending request to:', apiUrl);
+      console.log('[StreamingChat] With metadata:', metadata);
 
       // Make fetch request with streaming
       const response = await fetch(apiUrl, {

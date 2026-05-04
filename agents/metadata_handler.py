@@ -72,6 +72,28 @@ class RequestMetadata:
             self.additional_filters
         )
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert RequestMetadata to JSON-serializable dict"""
+        return {
+            'tenant_id': self.tenant_id,
+            'project_id': self.project_id,
+            'task_id': self.task_id,
+            'subtask_id': self.subtask_id,
+            'user_id': self.user_id,
+            'user_roles': self.user_roles,
+            'users': self.users,
+            'team_ids': self.team_ids,
+            'knowledge_type': self.knowledge_type,
+            'attachment_id': self.attachment_id,
+            'attachment_type': self.attachment_type,
+            'org_document_type': self.org_document_type,
+            'org_document_sub_type': self.org_document_sub_type,
+            'partition_type': self.partition_type,
+            'task_names': self.task_names,
+            'user_access_chain': self.user_access_chain,
+            'additional_filters': self.additional_filters
+        }
+
 
 class KBFilterBuilder:
     """
@@ -178,17 +200,7 @@ class KBFilterBuilder:
                 print(f'[KB Filter] ✅ project_id: {metadata.project_id}')
                 print(f'[KB Filter] ✅ partition_key (project only): {partition_key_project}')
 
-        # 3. Knowledge type filter (generic vs specific)
-        if metadata.knowledge_type:
-            conditions.append({
-                'equals': {
-                    'key': 'knowledge_type',
-                    'value': metadata.knowledge_type
-                }
-            })
-            print(f'[KB Filter] ✅ knowledge_type: {metadata.knowledge_type}')
-
-        # 4. Subtask filter (if present)
+        # 3. Subtask filter (if present) - OPTIONAL
         if metadata.subtask_id:
             conditions.append({
                 'equals': {
@@ -198,91 +210,16 @@ class KBFilterBuilder:
             })
             print(f'[KB Filter] ✅ subtask_id: {metadata.subtask_id}')
 
-        # 4. Partition type filter (PROJECT, TASK, SUBTASK, GENERIC)
-        if metadata.partition_type:
-            conditions.append({
-                'equals': {
-                    'key': 'partition_type',
-                    'value': metadata.partition_type
-                }
-            })
-            print(f'[KB Filter] Added partition_type: {metadata.partition_type}')
+        # IMPORTANT: Only the above filters are used for KB filtering
+        # The following fields are extracted but NOT used in KB filters:
+        # - knowledge_type, partition_type (not in S3 metadata)
+        # - user_roles, users, team_ids (access control, not storage metadata)
+        # - attachment_type, org_document_type (document classification, not in KB metadata)
+        # - userAgent, referrer, timestamp (frontend metadata, not in KB)
 
-        # 5. User roles filter (multi-value with OR logic)
-        if metadata.user_roles:
-            # User with ANY of these roles can access
-            role_conditions = [
-                {'equals': {'key': 'user_roles', 'value': role}}
-                for role in metadata.user_roles
-            ]
-
-            # Add wildcard "*" to allow documents accessible to all roles
-            role_conditions.append({
-                'equals': {'key': 'user_roles', 'value': '*'}
-            })
-
-            conditions.append({
-                'orAll': role_conditions
-            })
-            print(f'[KB Filter] Added user_roles: {metadata.user_roles}')
-
-        # 6. Users filter (specific user access with OR logic)
-        if metadata.users:
-            user_conditions = [
-                {'equals': {'key': 'users', 'value': user}}
-                for user in metadata.users
-            ]
-
-            # Add wildcard "*" to allow documents accessible to all users
-            user_conditions.append({
-                'equals': {'key': 'users', 'value': '*'}
-            })
-
-            conditions.append({
-                'orAll': user_conditions
-            })
-            print(f'[KB Filter] Added users: {metadata.users}')
-
-        # 7. Team IDs filter (multi-value with OR logic)
-        if metadata.team_ids:
-            team_conditions = [
-                {'equals': {'key': 'team_ids', 'value': team_id}}
-                for team_id in metadata.team_ids
-            ]
-
-            conditions.append({
-                'orAll': team_conditions
-            })
-            print(f'[KB Filter] Added team_ids: {metadata.team_ids}')
-
-        # 8. Document type filters
-        if metadata.attachment_type:
-            conditions.append({
-                'equals': {
-                    'key': 'attachment_type',
-                    'value': metadata.attachment_type
-                }
-            })
-            print(f'[KB Filter] Added attachment_type: {metadata.attachment_type}')
-
-        if metadata.org_document_type:
-            conditions.append({
-                'equals': {
-                    'key': 'org_document_type',
-                    'value': metadata.org_document_type
-                }
-            })
-            print(f'[KB Filter] Added org_document_type: {metadata.org_document_type}')
-
-        # 9. Additional custom filters
-        for key, value in metadata.additional_filters.items():
-            conditions.append({
-                'equals': {
-                    'key': key,
-                    'value': str(value)
-                }
-            })
-            print(f'[KB Filter] Added custom filter: {key}={value}')
+        # NOTE: We do NOT add additional_filters to KB filter
+        # Fields like userAgent, referrer, timestamp are NOT stored in S3 metadata
+        # Only the fields above (tenant_id, project_id, partition_key, etc.) are valid KB filters
 
         if not conditions:
             return None
@@ -299,7 +236,7 @@ class KBFilterBuilder:
         Extract metadata from HTTP request headers and body.
         Supports full metadata.fallback schema.
 
-        Priority: Headers > Body
+        Priority: Headers > Body.metadata object > Body root level
 
         Expected headers (case-insensitive):
         - X-Tenant-Id
@@ -310,9 +247,29 @@ class KBFilterBuilder:
         - X-Subtask-Id
         - X-Knowledge-Type
         - X-Partition-Type
+
+        Expected body structure (NEW):
+        {
+          "inputText": "...",
+          "sessionId": "...",
+          "metadata": {
+            "tenant_id": "1",
+            "project_id": "165",
+            "task_id": "174",
+            ...
+          }
+        }
         """
         # Normalize headers to lowercase for case-insensitive lookup
         headers_lower = {k.lower(): v for k, v in headers.items()}
+
+        # Extract metadata object from body (NEW: preferred location)
+        metadata_obj = body.get('metadata', {})
+
+        # DEBUG: Log what we received
+        print(f'[Metadata Extract] Body keys: {list(body.keys())}')
+        print(f'[Metadata Extract] Metadata object keys: {list(metadata_obj.keys())}')
+        print(f'[Metadata Extract] Metadata object content: {metadata_obj}')
 
         # Extract from headers (primary source)
         tenant_id = headers_lower.get('x-tenant-id')
@@ -324,34 +281,37 @@ class KBFilterBuilder:
         knowledge_type = headers_lower.get('x-knowledge-type')
         partition_type = headers_lower.get('x-partition-type')
 
-        # Fallback to body if headers not present (snake_case preferred for AWS Bedrock)
+        # Fallback to body.metadata object, then body root level (priority order)
         if not tenant_id:
-            tenant_id = body.get('tenant_id') or body.get('tenantId')
+            tenant_id = metadata_obj.get('tenant_id') or metadata_obj.get('tenantId') or body.get('tenant_id') or body.get('tenantId')
+            print(f'[Metadata Extract] tenant_id extracted: {tenant_id}')
         if not user_id:
-            user_id = body.get('user_id') or body.get('userId')
+            user_id = metadata_obj.get('user_id') or metadata_obj.get('userId') or body.get('user_id') or body.get('userId')
         if not user_roles_str:
-            user_roles_str = body.get('user_roles') or body.get('userRoles') or body.get('roles')
+            user_roles_str = metadata_obj.get('user_roles') or metadata_obj.get('userRoles') or body.get('user_roles') or body.get('userRoles') or body.get('roles')
         if not project_id:
-            project_id = body.get('project_id') or body.get('projectId')
+            project_id = metadata_obj.get('project_id') or metadata_obj.get('projectId') or body.get('project_id') or body.get('projectId')
+            print(f'[Metadata Extract] project_id extracted: {project_id}')
         if not task_id:
-            task_id = body.get('task_id') or body.get('taskId')
+            task_id = metadata_obj.get('task_id') or metadata_obj.get('taskId') or body.get('task_id') or body.get('taskId')
+            print(f'[Metadata Extract] task_id extracted: {task_id}')
         if not subtask_id:
-            subtask_id = body.get('subtask_id') or body.get('subtaskId')
+            subtask_id = metadata_obj.get('subtask_id') or metadata_obj.get('subtaskId') or body.get('subtask_id') or body.get('subtaskId')
         if not knowledge_type:
-            knowledge_type = body.get('knowledge_type') or body.get('knowledgeType')
+            knowledge_type = metadata_obj.get('knowledge_type') or metadata_obj.get('knowledgeType') or body.get('knowledge_type') or body.get('knowledgeType')
         if not partition_type:
-            partition_type = body.get('partition_type') or body.get('partitionType')
+            partition_type = metadata_obj.get('partition_type') or metadata_obj.get('partitionType') or body.get('partition_type') or body.get('partitionType')
 
-        # Extract additional fields from body
-        attachment_id = body.get('attachment_id') or body.get('attachmentId')
-        attachment_type = body.get('attachment_type') or body.get('attachmentType')
-        org_document_type = body.get('org_document_type') or body.get('orgDocumentType')
-        org_document_sub_type = body.get('org_document_sub_type') or body.get('orgDocumentSubType')
+        # Extract additional fields from metadata object or body (priority: metadata_obj > body)
+        attachment_id = metadata_obj.get('attachment_id') or metadata_obj.get('attachmentId') or body.get('attachment_id') or body.get('attachmentId')
+        attachment_type = metadata_obj.get('attachment_type') or metadata_obj.get('attachmentType') or body.get('attachment_type') or body.get('attachmentType')
+        org_document_type = metadata_obj.get('org_document_type') or metadata_obj.get('orgDocumentType') or body.get('org_document_type') or body.get('orgDocumentType')
+        org_document_sub_type = metadata_obj.get('org_document_sub_type') or metadata_obj.get('orgDocumentSubType') or body.get('org_document_sub_type') or body.get('orgDocumentSubType')
 
-        users_data = body.get('users')
-        team_ids_data = body.get('team_ids') or body.get('teamIds')
-        task_names_data = body.get('task_names') or body.get('taskNames')
-        user_access_chain_data = body.get('user_access_chain') or body.get('userAccessChain')
+        users_data = metadata_obj.get('users') or body.get('users')
+        team_ids_data = metadata_obj.get('team_ids') or metadata_obj.get('teamIds') or body.get('team_ids') or body.get('teamIds')
+        task_names_data = metadata_obj.get('task_names') or metadata_obj.get('taskNames') or body.get('task_names') or body.get('taskNames')
+        user_access_chain_data = metadata_obj.get('user_access_chain') or metadata_obj.get('userAccessChain') or body.get('user_access_chain') or body.get('userAccessChain')
 
         # Parse comma-separated or list values
         user_roles = None
@@ -389,8 +349,18 @@ class KBFilterBuilder:
             elif isinstance(user_access_chain_data, list):
                 user_access_chain = user_access_chain_data
 
-        # Extract additional custom filters from body
-        additional_filters = body.get('metadata', {})
+        # Extract additional custom filters from metadata object
+        # NOTE: All fields in metadata_obj are already extracted above,
+        # but we keep this for any extra custom fields not explicitly handled
+        additional_filters = {k: v for k, v in metadata_obj.items()
+                            if k not in ['tenant_id', 'tenantId', 'project_id', 'projectId',
+                                       'task_id', 'taskId', 'subtask_id', 'subtaskId',
+                                       'user_id', 'userId', 'user_roles', 'userRoles',
+                                       'knowledge_type', 'knowledgeType', 'partition_type', 'partitionType',
+                                       'attachment_id', 'attachmentId', 'attachment_type', 'attachmentType',
+                                       'org_document_type', 'orgDocumentType', 'org_document_sub_type', 'orgDocumentSubType',
+                                       'users', 'team_ids', 'teamIds', 'task_names', 'taskNames',
+                                       'user_access_chain', 'userAccessChain']}
 
         metadata = RequestMetadata(
             tenant_id=tenant_id,
