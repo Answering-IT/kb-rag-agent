@@ -10,6 +10,7 @@ interface Message {
 export interface WebSocketChatConfig {
   wsUrl?: string;
   sessionId?: string;
+  metadata?: Record<string, any>;
   onMessageSent?: (message: Message) => void;
   onMessageReceived?: (message: Message) => void;
   onConnectionChange?: (connected: boolean) => void;
@@ -29,6 +30,7 @@ export function useWebSocketChat(config: WebSocketChatConfig = {}): UseWebSocket
   const {
     wsUrl = DEFAULT_WS_URL,
     sessionId: externalSessionId,
+    metadata,
     onMessageSent,
     onMessageReceived,
     onConnectionChange,
@@ -133,8 +135,8 @@ export function useWebSocketChat(config: WebSocketChatConfig = {}): UseWebSocket
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('[WebSocketChat] Error:', error);
+      ws.onerror = (event: Event) => {
+        console.error('[WebSocketChat] WebSocket error occurred');
       };
 
       wsRef.current = ws;
@@ -156,15 +158,20 @@ export function useWebSocketChat(config: WebSocketChatConfig = {}): UseWebSocket
 
     onMessageSent?.(userMessage);
 
-    // Send via WebSocket
+    // Send via WebSocket with metadata
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        action: 'message',
-        question: content,
-        sessionId: sessionId,
-      }));
+      const payload: Record<string, any> = {
+        action: 'sendMessage',
+        data: {
+          inputText: content,
+          sessionId: sessionId,
+          ...(metadata || {}), // Spread metadata fields directly into data
+        }
+      };
+
+      wsRef.current.send(JSON.stringify(payload));
     }
-  }, [isLoading, isConnected, sessionId, onMessageSent]);
+  }, [isLoading, isConnected, sessionId, metadata, onMessageSent]);
 
   useEffect(() => {
     connect();

@@ -60,10 +60,11 @@ export default function WidgetPage() {
       // For example: if (event.origin !== 'https://your-angular-app.com') return;
 
       if (event.data.type === 'INIT') {
-        console.log('[Widget] Received INIT message from parent:', event.data.data);
+        console.log('[Widget] Received INIT message');
         clearTimeout(initTimeout);
 
         const initData = event.data.data || {};
+
         const newConfig: StreamingChatConfig = {
           apiUrl: initData.apiUrl || initData.wsUrl, // Support both old wsUrl and new apiUrl for backward compatibility
           authToken: initData.authToken,

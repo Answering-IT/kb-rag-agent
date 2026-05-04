@@ -90,8 +90,8 @@ export const ProcessingConfig = {
   // Chunking strategy
   chunking: {
     strategy: 'FIXED_SIZE',
-    maxTokens: 512,
-    overlapPercentage: 20,
+    maxTokens: 2000,       // Increased from 512 to reduce chunk count (fewer chunks = less metadata overhead)
+    overlapPercentage: 10, // Reduced from 20 to minimize redundancy
   },
 
   // Lambda configuration
@@ -230,7 +230,7 @@ Content Safety:
 
 Remember: Your knowledge comes from the documents in the knowledge base. Always ground your responses in the actual content available.`,
 
-  // Foundation model (using Amazon Nova Pro - confirmed active)
+  // Foundation model (using Amazon Nova Pro - available without marketplace subscription)
   foundationModel: 'amazon.nova-pro-v1:0',
 
   // Session configuration

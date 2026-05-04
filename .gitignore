@@ -46,3 +46,14 @@ lerna-debug.log*
 *.tmp
 .cache/
 .temp/
+
+# Migration test environment
+scripts/migration/test-env/
+
+# Test scripts (keep only main test files)
+scripts/test-agent-tools.sh
+scripts/test-extended-metadata.py
+scripts/test-metadata-filtering-e2e.py
+scripts/test-websocket-e2e-metadata.py
+scripts/test-wscat-metadata.sh
+scripts/requirements.txt

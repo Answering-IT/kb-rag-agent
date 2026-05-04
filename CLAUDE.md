@@ -85,16 +85,19 @@ CDK deploys 9 stacks with strict dependencies (defined in `infrastructure/bin/ap
 
 **Agent V2 (ACTIVE - infrastructure/lib/AgentStackV2.ts):**
 - Uses `@aws-cdk/aws-bedrock-agentcore-alpha` (Agent Core Runtime)
-- Custom Python agent in `agents/main.py` using Strand SDK (~259 lines, optimized for simplicity)
+- Model: Amazon Nova Pro (`amazon.nova-pro-v1:0`) - set via `MODEL_ID` environment variable
+- Custom Python agent in `agents/main.py` using Strand SDK (~240 lines, optimized)
 - Specialized for Colombian pension regulations (Colpensiones)
-- Tools: `search_knowledge_base`, `consult_normative_document`, `http_request`
+- Tools: `retrieve` (KB search), `http_request` (official gov sites)
 - FastAPI server in Docker container
 - Stack name: `dev-us-east-1-agent-v2`
-- **Optimizations:**
-  - Filters `<thinking>` tags from responses (user sees clean output)
+- **Key Features:**
+  - Multi-tenant metadata filtering via partition_key (strict isolation)
+  - Filters `<thinking>` tags from responses (clean user output)
   - Streaming chunks: 3 words (low latency)
-  - Token limits: 2000 chars framework, 4000 chars max response
+  - Max response: 4000 chars
   - User-friendly error messages (technical details only in logs)
+  - Session memory: last 6 messages for context
 
 **Agent V1 (LEGACY - infrastructure/lib/AgentStack.ts):**
 - Uses Bedrock Agent service (managed)
@@ -113,9 +116,16 @@ S3 Upload → OCR Lambda (if image/PDF) → Bedrock KB Sync → Chunking/Embeddi
 
 **Key Components:**
 - **OCR Lambda** (`infrastructure/lambdas/ocr-processor/index.py`) - Textract integration for images/PDFs
-- **Bedrock KB** - Automatic chunking (512 tokens, 20% overlap), embedding (Titan v2), indexing
+- **Bedrock KB** - Automatic chunking (2000 tokens, 10% overlap), embedding (Titan v2), indexing
 - **S3 Vectors** - Storage type (~90% cheaper than OpenSearch)
 - **Sync Schedule** - Every 6 hours (`config/environments.ts:138`)
+- **Metadata Filtering** - partition_key field ensures strict tenant/project/task isolation
+
+**Chunking Configuration (Updated 2026-05-03):**
+- Increased from 512 to 2000 tokens per chunk (75% reduction in chunk count)
+- Reduced overlap from 20% to 10% to minimize redundancy
+- Solves "metadata must be at most 2048 bytes" error for large documents
+- Config in `environments.ts:89-95`, applied in `BedrockStack.ts:152-158`
 
 **NOT USED:** The `embedder` Lambda exists but is inactive (Bedrock KB handles embeddings natively). May be removed in future cleanup.
 
@@ -128,13 +138,22 @@ S3 Upload → OCR Lambda (if image/PDF) → Bedrock KB Sync → Chunking/Embeddi
 **Critical Lines:**
 - **Line 20:** AWS profile `ans-super`
 - **Lines 40-50:** Bedrock models (Titan v2 embedding, Claude Sonnet 4.5 LLM)
-- **Lines 90-95:** Chunking strategy (512 tokens, 20% overlap)
+- **Lines 89-95:** Chunking strategy (2000 tokens, 10% overlap) - **UPDATED 2026-05-03**
 - **Line 138:** KB sync schedule (`rate(6 hours)`)
 - **Lines 156-166:** Guardrails PII entities (EMAIL, PHONE, SSN, etc.)
 - **Lines 209-231:** Agent V1 system instructions
 - **Lines 382-393:** Multi-tenancy config (metadata filtering enabled)
 
-**Key Insight:** Multi-tenancy is implemented via S3 object metadata (`x-amz-meta-*` headers), not separate buckets.
+**Multi-Tenancy Implementation:**
+- S3 object metadata (`x-amz-meta-*` headers), not separate buckets
+- partition_key field: `t{tenant}_p{project}[_t{task}]` for strict isolation
+- Generated dynamically in `metadata_handler.py:84-103`
+- Applied in KB retrieval filters for tenant/project/task level access control
+
+**Model Assignment Flow:**
+- `environments.ts:234` defines `AgentConfig.foundationModel = 'amazon.nova-pro-v1:0'`
+- `AgentStackV2.ts:162` passes this to Agent V2 runtime as `MODEL_ID` environment variable
+- `agents/main.py:18` has fallback to Claude 3.5 Sonnet (unused in deployment, only for local dev without env vars)
 
 ### CDK Entry Point: `infrastructure/bin/app.ts`
 
@@ -553,7 +572,7 @@ cd fe && npm run dev
 | `infrastructure/bin/app.ts` | CDK entry point, stack orchestration | 112-123 (Agent V2) |
 | `infrastructure/config/environments.ts` | All configuration | 20 (profile), 40-50 (models), 90-95 (chunking) |
 | `infrastructure/lib/AgentStackV2.ts` | Agent V2 CDK stack | Entire file |
-| `agents/main.py` | Agent V2 implementation | Entire file |
+| `agents/main.py` | Agent V2 implementation (256 lines) | 18 (MODEL_ID fallback), 38 (framework truncation), 210 (streaming chunks) |
 | `infrastructure/lambdas/ocr-processor/index.py` | OCR Lambda | Entire file |
 | **Frontend** |
 | `fe/lib/translations.ts` | Translation strings (ES/EN) and version | 5 (APP_VERSION), 19-46 (translations) |
@@ -580,30 +599,54 @@ Full technical documentation available in:
 
 ---
 
-## Recent Changes (2026-04-29)
+## Recent Changes
 
-### Agent V2 Simplification & Optimization
+### 2026-05-03: Metadata Filtering & Chunking Optimization
 
-**Code reduction:** 849 lines → 259 lines (~70% reduction)
+**Multi-Tenant Isolation (partition_key approach):**
+- ✅ Implemented strict metadata filtering with partition_key field
+- ✅ Format: `t{tenant}_p{project}[_t{task}]` for hierarchical isolation
+- ✅ Dynamic generation in `metadata_handler.py:84-103`
+- ✅ Tenant-only: returns ALL tenant documents
+- ✅ Tenant+Project: returns ONLY project-level documents (excludes task docs)
+- ✅ Tenant+Project+Task: returns ONLY task-level documents
+- ✅ Migration script: `scripts/add-partition-keys.py` (added partition_key to 15 docs)
+
+**Chunking Configuration Update:**
+- ✅ Increased from 512 to 2000 tokens per chunk (75% reduction)
+- ✅ Reduced overlap from 20% to 10%
+- ✅ Solves "metadata must be at most 2048 bytes" error for large documents
+- ✅ BedrockStack now uses ProcessingConfig (centralized config)
+- ✅ DataSource recreated with new settings (ID: TQRXQZIMTS, was: 6H96SSTEHT)
+- ✅ Successfully ingested 14/16 documents (2 failures for very large files)
+
+**Code Cleanup:**
+- ✅ Reduced agent logs in `main.py` (~240 lines, production-ready)
+- ✅ Archived temporary troubleshooting docs to `docs/troubleshooting-archive/`
+- ✅ Archived testing scripts to `scripts/testing-archive/`
+- ✅ Removed `agents/IMPLEMENTATION_SUMMARY.md`
+
+**Current Status:**
+- Knowledge Base ID: R80HXGRLHO
+- DataSource ID: TQRXQZIMTS (recreated with new chunking config)
+- All infrastructure verified and connected
+- CloudFormation exports updated with new DataSource ID
+- Sync Lambda has correct DATA_SOURCE_ID environment variable
+
+### 2026-04-29: Agent V2 Simplification
+
+**Code reduction:** 849 lines → 240 lines (~70% reduction)
 
 **Improvements:**
 1. ✅ **Removed `<thinking>` tags** from user responses (still in logs)
 2. ✅ **Reduced latency** - streaming chunks: 10 words → 3 words
 3. ✅ **User-friendly errors** - technical details only in CloudWatch logs
-4. ✅ **Token overflow prevention** - aggressive truncation at load time
-5. ✅ **Simplified session management** - no complex classes, just dict with last 4 messages
-6. ✅ **Clean system prompt** - 590 lines → 28 lines (essential only)
+4. ✅ **Simplified session management** - dict with last 6 messages for context
+5. ✅ **Clean system prompt** - essential instructions only
 
-**Removed complexity:**
-- ❌ `ConversationMessage`, `SessionConversation`, `ConversationStore` classes
-- ❌ Background cleanup threads
-- ❌ Multiple truncation strategies
-- ❌ Complex session statistics endpoints
-- ❌ `get_project_info` tool (unused)
-
-**Key files modified:**
-- `agents/main.py` - simplified agent implementation (now 259 lines)
-- `scripts/test-websocket.sh` - new WebSocket test script
+**Key files:**
+- `agents/main.py` - optimized agent implementation
+- `agents/metadata_handler.py` - multi-tenant filtering logic
 
 **Test with:**
 ```bash
@@ -613,9 +656,11 @@ wscat -c wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
 
 ---
 
-**Last Updated:** 2026-04-29  
-**Primary Stack:** Agent V2 (Agent Core Runtime with Strand SDK, simplified)  
+**Last Updated:** 2026-05-03  
+**Primary Stack:** Agent V2 (Agent Core Runtime with Strand SDK)  
 **Frontend Version:** v0.0.1 (Spanish default, WebSocket default)  
 **AWS Account:** 708819485463 (dev)  
 **AWS Profile:** ans-super  
-**WebSocket URL:** `wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev`
+**WebSocket URL:** `wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev`  
+**Knowledge Base ID:** R80HXGRLHO  
+**DataSource ID:** TQRXQZIMTS (chunking: 2000 tokens, 10% overlap)

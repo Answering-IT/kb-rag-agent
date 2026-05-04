@@ -60,14 +60,34 @@ export class AgentStackV2 extends cdk.Stack {
       maxSessionDuration: cdk.Duration.hours(1),
     });
 
-    // Grant permissions to invoke foundation model
+    // Grant permissions to invoke foundation model or inference profile
+    // When using inference profiles, we need to grant access to BOTH:
+    // 1. The inference profile ARN (what we configure)
+    // 2. The underlying foundation model ARN (what the SDK actually invokes)
+    const modelResources: string[] = [];
+
+    if (AgentConfig.foundationModel.startsWith('us.') || AgentConfig.foundationModel.startsWith('global.')) {
+      // Inference profile - add both inference profile and underlying model
+      modelResources.push(
+        `arn:aws:bedrock:${region}:${props.accountId}:inference-profile/${AgentConfig.foundationModel}`
+      );
+      // Extract underlying model ID (e.g., us.anthropic.claude-sonnet-4-5-20250929-v1:0 -> anthropic.claude-sonnet-4-5-20250929-v1:0)
+      const underlyingModelId = AgentConfig.foundationModel.replace(/^(us|global)\./, '');
+      modelResources.push(
+        `arn:aws:bedrock:${region}::foundation-model/${underlyingModelId}`
+      );
+    } else {
+      // Direct model ID
+      modelResources.push(
+        `arn:aws:bedrock:${region}::foundation-model/${AgentConfig.foundationModel}`
+      );
+    }
+
     runtimeRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-        resources: [
-          `arn:aws:bedrock:${region}::foundation-model/${AgentConfig.foundationModel}`,
-        ],
+        resources: ['*'],
       })
     );
 

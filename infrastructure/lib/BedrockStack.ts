@@ -17,7 +17,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import { Construct } from 'constructs';
-import { KnowledgeBaseConfig } from '../config/environments';
+import { KnowledgeBaseConfig, ProcessingConfig } from '../config/environments';
 
 export interface BedrockStackProps extends cdk.StackProps {
   stage: string;
@@ -141,10 +141,9 @@ export class BedrockStack extends cdk.Stack {
         type: 'S3',
         s3Configuration: {
           bucketArn: props.docsBucket.bucketArn,
-          // Include both original documents and OCR-processed text
-          // Bedrock reads all files under documents/ including subfolders
-          // (documents/processed/ is automatically included)
-          inclusionPrefixes: ['documents/'],
+          // Only scan tenant/ prefix for multi-tenant documents with metadata
+          // All documents must be organized under tenant/{tenant_id}/ structure
+          inclusionPrefixes: ['tenant/'],
         },
       },
 
@@ -153,8 +152,8 @@ export class BedrockStack extends cdk.Stack {
         chunkingConfiguration: {
           chunkingStrategy: 'FIXED_SIZE',
           fixedSizeChunkingConfiguration: {
-            maxTokens: 512,
-            overlapPercentage: 20,
+            maxTokens: ProcessingConfig.chunking.maxTokens,
+            overlapPercentage: ProcessingConfig.chunking.overlapPercentage,
           },
         },
       },

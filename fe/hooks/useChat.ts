@@ -6,6 +6,7 @@ export type ChatMode = 'websocket' | 'streaming';
 export interface ChatConfig {
   mode?: ChatMode;
   sessionId?: string;
+  metadata?: Record<string, any>;
   onMessageSent?: (message: any) => void;
   onMessageReceived?: (message: any) => void;
   onConnectionChange?: (connected: boolean) => void;
@@ -21,6 +22,7 @@ export function useChat(config: ChatConfig = {}) {
 
   const wsChat = useWebSocketChat({
     sessionId: config.sessionId,
+    metadata: config.metadata,
     onMessageSent: config.onMessageSent,
     onMessageReceived: config.onMessageReceived,
     onConnectionChange: config.onConnectionChange,
@@ -28,6 +30,7 @@ export function useChat(config: ChatConfig = {}) {
 
   const streamingChat = useStreamingChat({
     sessionId: config.sessionId,
+    metadata: config.metadata,
     onMessageSent: config.onMessageSent,
     onMessageReceived: config.onMessageReceived,
     onConnectionChange: config.onConnectionChange,
