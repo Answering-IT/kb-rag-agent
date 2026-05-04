@@ -82,6 +82,28 @@ class KBFilterBuilder:
     """
 
     @staticmethod
+    def generate_partition_key(tenant_id: str, project_id: str = None, task_id: str = None) -> Optional[str]:
+        """
+        Generate partition_key from tenant_id, project_id, and optional task_id.
+
+        Format:
+        - Project-level: t{tenant}_p{project}
+        - Task-level: t{tenant}_p{project}_t{task}
+
+        Examples:
+        - generate_partition_key("1001", "165") -> "t1001_p165"
+        - generate_partition_key("1001", "165", "174") -> "t1001_p165_t174"
+        """
+        if not tenant_id or not project_id:
+            return None
+
+        partition_key = f"t{tenant_id}_p{project_id}"
+        if task_id:
+            partition_key += f"_t{task_id}"
+
+        return partition_key
+
+    @staticmethod
     def build_filter(metadata: RequestMetadata) -> Optional[Dict[str, Any]]:
         """
         Build Bedrock KB filter from request metadata using partition_key for strict isolation.
@@ -119,36 +141,42 @@ class KBFilterBuilder:
         # 2. Build partition_key filter based on hierarchy
         if metadata.task_id and metadata.project_id:
             # STRICT: Only task-level docs
-            partition_key = f"t{metadata.tenant_id}_p{metadata.project_id}_t{metadata.task_id}"
-            conditions.append({
-                'equals': {
-                    'key': 'partition_key',
-                    'value': partition_key
-                }
-            })
-            print(f'[KB Filter] ✅ partition_key (task only): {partition_key}')
+            partition_key = KBFilterBuilder.generate_partition_key(
+                metadata.tenant_id,
+                metadata.project_id,
+                metadata.task_id
+            )
+            if partition_key:
+                conditions.append({
+                    'equals': {
+                        'key': 'partition_key',
+                        'value': partition_key
+                    }
+                })
+                print(f'[KB Filter] ✅ partition_key (task only): {partition_key}')
 
         elif metadata.project_id:
-            # Project + all its tasks: Use orAll with startsWith pattern
-            # Since Bedrock doesn't support startsWith, we use explicit equals for project-level
-            # and rely on tenant_id + project_id matching
-            partition_key_project = f"t{metadata.tenant_id}_p{metadata.project_id}"
-
-            # Add both project_id and partition_key for double validation
-            conditions.append({
-                'equals': {
-                    'key': 'project_id',
-                    'value': str(metadata.project_id)
-                }
-            })
-            conditions.append({
-                'equals': {
-                    'key': 'partition_key',
-                    'value': partition_key_project
-                }
-            })
-            print(f'[KB Filter] ✅ project_id: {metadata.project_id}')
-            print(f'[KB Filter] ✅ partition_key (project only): {partition_key_project}')
+            # STRICT: Only project-level docs (exclude tasks)
+            partition_key_project = KBFilterBuilder.generate_partition_key(
+                metadata.tenant_id,
+                metadata.project_id
+            )
+            if partition_key_project:
+                # Add both project_id and partition_key for double validation
+                conditions.append({
+                    'equals': {
+                        'key': 'project_id',
+                        'value': str(metadata.project_id)
+                    }
+                })
+                conditions.append({
+                    'equals': {
+                        'key': 'partition_key',
+                        'value': partition_key_project
+                    }
+                })
+                print(f'[KB Filter] ✅ project_id: {metadata.project_id}')
+                print(f'[KB Filter] ✅ partition_key (project only): {partition_key_project}')
 
         # 3. Knowledge type filter (generic vs specific)
         if metadata.knowledge_type:
