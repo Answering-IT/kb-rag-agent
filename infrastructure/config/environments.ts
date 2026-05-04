@@ -131,8 +131,8 @@ export const ProcessingConfig = {
  * Knowledge Base Configuration
  */
 export const KnowledgeBaseConfig = {
-  name: 'processapp-kb',
-  description: 'ProcessApp document knowledge base for RAG',
+  name: 'processapp-kb-v3',
+  description: 'ProcessApp document knowledge base for RAG with non-filterable metadata',
 
   // Sync schedule (every 6 hours)
   syncSchedule: 'rate(6 hours)',

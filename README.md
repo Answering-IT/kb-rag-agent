@@ -72,7 +72,7 @@ npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval nev
 npm install -g wscat
 
 # Connect
-wscat -c wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
+wscat -c wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
 
 # Send message
 {"action":"sendMessage","data":{"inputText":"¿Cómo me puedes ayudar?","sessionId":"test-123"}}
@@ -1235,7 +1235,7 @@ npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval nev
 
 **Test the improvements:**
 ```bash
-wscat -c wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
+wscat -c wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
 {"action":"sendMessage","data":{"inputText":"¿Cómo me puedes ayudar?","sessionId":"test"}}
 ```
 

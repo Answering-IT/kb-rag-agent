@@ -1,0 +1,27 @@
+Recommended Approach
+
+When working with large documents (like 1MB files or more) in S3 Vectors, you should use non-filterable metadata for storing the larger content while using chunking strategies for effective semantic search.
+
+Here's how to approach this:
+
+    Use non-filterable metadata for large content: While filterable metadata has a 2KB limit (or 40KB extended size), non-filterable metadata is designed specifically for storing larger amounts of contextual data. This is ideal for storing full document text, detailed descriptions, or other large content that doesn't need to be searchable but should be returned with query results.
+
+    Implement a chunking strategy: Divide your large document into smaller, meaningful chunks (paragraphs, sections, etc.). Each chunk would be represented as a separate vector in your index.
+
+    Store the chunks as vectors: For each chunk, create a vector embedding representing its semantic meaning, and store this in your S3 Vector index.
+
+    Use metadata effectively:
+
+    Store the chunk's text content as non-filterable metadata
+    Use filterable metadata for attributes you want to query on (document ID, section number, categories, etc.)
+
+    Retrieve and reconstruct: When performing semantic search, you'll get back the most relevant chunks. You can then retrieve the associated non-filterable metadata containing the actual text content.
+
+This approach allows you to search across large documents by finding the most semantically relevant chunks, while still maintaining access to the full content through non-filterable metadata. The semantic search operates at the chunk level, finding the most relevant pieces of your document based on the vector similarity.
+
+Remember that non-filterable metadata keys must be explicitly configured during vector index creation and cannot be changed to filterable later. You can configure up to 10 non-filterable metadata keys per vector index.
+
+
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-metadata-filtering.html
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-best-practices.html
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-indexes.html

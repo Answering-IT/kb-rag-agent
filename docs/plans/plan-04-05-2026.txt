@@ -1,0 +1,27 @@
+I need to process and vectorize bigfiles and being able to retrieve the info of these files by using metadata partition key
+ partition_key format:
+        - Tenant: t{tenant}
+        - Project-level: t{tenant}_p{project}
+        - Task-level: t{tenant}_p{project}_t{task}
+
+
+I see the non-filterable metadata and filterable metadata but I really don't understand those concepts.
+
+Let's work on this scenario for testing
+
+The /Users/qohatpretel/Answering/kb-rag-agent/agents/marco_normativo_colpensiones.md should be at tenat folder level and should have metadata {tenant_id: 1}
+So the user always that send tenant_id: 1 this content should be available for the RAG
+
+For example, 
+- Esta información siempre debería estar disponible para buscar por el tenant id
+
+
+Habrán incluso archivos mucho más pesados y los cuales deberían tener su propia metadata para poder consultarlos solo en los casos especificos que se necesita
+
+Por favor entiende el agent en agents, entiende la metadata (No cambies eso, eso funciona actualmente), pero ayudame a generar la estrategía y el plan para lidiar de la forma mas simple con todos los archivos pesados
+
+También explicame con claridad eso de la metadata filtrable y no filtrable.
+
+Ve a la documentación y crea el approach mas profesional, no olvides ponerte en contexto del proyecto, y al final saber que todo cambio en infraestructura debe quedar en cdk
+Ve a /Users/qohatpretel/Answering/kb-rag-agent/docs/plans/vector_store_strategy.txt y prepra un plan
+

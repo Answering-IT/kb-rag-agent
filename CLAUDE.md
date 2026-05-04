@@ -262,7 +262,7 @@ aws bedrock-agent start-ingestion-job \
 npm install -g wscat
 
 # Connect to WebSocket
-wscat -c wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
+wscat -c wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
 
 # Send message (copy-paste after connecting)
 {"action":"sendMessage","data":{"inputText":"¿Cómo me puedes ayudar?","sessionId":"test-123"}}
@@ -383,7 +383,7 @@ npm run start        # Start production server
 
 ```env
 # WebSocket endpoint (default)
-NEXT_PUBLIC_WS_URL=wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
+NEXT_PUBLIC_WS_URL=wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
 
 # REST streaming endpoint (alternative)
 NEXT_PUBLIC_STREAMING_API_URL=https://elgoe2eluevfh2kpte4dyuttji0romxw.lambda-url.us-east-1.on.aws/
@@ -650,7 +650,7 @@ Full technical documentation available in:
 
 **Test with:**
 ```bash
-wscat -c wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
+wscat -c wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
 {"action":"sendMessage","data":{"inputText":"¿Cómo me puedes ayudar?","sessionId":"test-123"}}
 ```
 
@@ -661,6 +661,6 @@ wscat -c wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev
 **Frontend Version:** v0.0.1 (Spanish default, WebSocket default)  
 **AWS Account:** 708819485463 (dev)  
 **AWS Profile:** ans-super  
-**WebSocket URL:** `wss://mm40zmgsjd.execute-api.us-east-1.amazonaws.com/dev`  
+**WebSocket URL:** `wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev`  
 **Knowledge Base ID:** R80HXGRLHO  
 **DataSource ID:** TQRXQZIMTS (chunking: 2000 tokens, 10% overlap)

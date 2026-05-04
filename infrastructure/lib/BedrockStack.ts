@@ -16,6 +16,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
+import { CfnIndex } from 'aws-cdk-lib/aws-s3vectors';
 import { Construct } from 'constructs';
 import { KnowledgeBaseConfig, ProcessingConfig } from '../config/environments';
 
@@ -50,7 +51,7 @@ export class BedrockStack extends cdk.Stack {
     // ========================================
 
     const vectorBucketName = `processapp-vectors-${props.stage}-${props.accountId}`;
-    const vectorIndexName = `${kbName}-vector-index`;
+    const vectorIndexName = `${kbName}-vector-index-v3`;
 
     // Create S3 Vector Bucket using native CloudFormation
     const vectorBucket = new cdk.CfnResource(this, 'VectorBucket', {
@@ -65,28 +66,36 @@ export class BedrockStack extends cdk.Stack {
       },
     });
 
-    // Create S3 Vector Index using native CloudFormation
-    const vectorIndex = new cdk.CfnResource(this, 'VectorIndex', {
-      type: 'AWS::S3Vectors::Index',
-      properties: {
-        VectorBucketName: vectorBucketName,
-        IndexName: vectorIndexName,
-        DataType: 'float32',
-        Dimension: 1024, // Titan v2 embeddings dimension
-        DistanceMetric: 'cosine',
-        Tags: [
-          { Key: 'Environment', Value: props.stage },
-          { Key: 'Application', Value: 'processapp' },
-          { Key: 'Component', Value: 'rag-vectors' },
+    // Create S3 Vector Index using official CDK construct
+    const vectorIndex = new CfnIndex(this, 'VectorIndex', {
+      vectorBucketName: vectorBucketName,
+      indexName: vectorIndexName,
+      dataType: 'float32',
+      dimension: 1024, // Titan v2 embeddings dimension
+      distanceMetric: 'cosine',
+      // Non-filterable metadata configuration
+      metadataConfiguration: {
+        nonFilterableMetadataKeys: [
+          'AMAZON_BEDROCK_TEXT',      // CRÍTICO: El texto del chunk de Bedrock
+          'AMAZON_BEDROCK_METADATA',  // CRÍTICO: La metadata interna de Bedrock
+          'attachment_id',
+          'file_name',
+          'attachment_type',
+          'project_path'
         ],
       },
+      tags: [
+        { key: 'Environment', value: props.stage },
+        { key: 'Application', value: 'processapp' },
+        { key: 'Component', value: 'rag-vectors' },
+      ],
     });
 
     // Ensure index is created after bucket
     vectorIndex.addDependency(vectorBucket);
 
     // Get the index ARN
-    const vectorIndexArn = vectorIndex.getAtt('IndexArn').toString();
+    const vectorIndexArn = vectorIndex.attrIndexArn;
 
     // Note: s3vectors permissions are granted in SecurityStack
 
@@ -131,9 +140,9 @@ export class BedrockStack extends cdk.Stack {
     // DATA SOURCE (S3)
     // ========================================
 
-    const dataSource = new bedrock.CfnDataSource(this, 'DataSource', {
-      name: `${kbName}-datasource`,
-      description: 'S3 data source for document ingestion',
+    const dataSource = new bedrock.CfnDataSource(this, 'DataSourceV2', {
+      name: `${kbName}-datasource-v2`,
+      description: 'S3 data source for document ingestion with non-filterable metadata',
       knowledgeBaseId: this.knowledgeBaseId,
 
       // S3 data source configuration
@@ -141,9 +150,9 @@ export class BedrockStack extends cdk.Stack {
         type: 'S3',
         s3Configuration: {
           bucketArn: props.docsBucket.bucketArn,
-          // Only scan tenant/ prefix for multi-tenant documents with metadata
-          // All documents must be organized under tenant/{tenant_id}/ structure
-          inclusionPrefixes: ['tenant/'],
+          // Scan organization/ prefix for migrated Colpensiones documents with metadata
+          // Each file must have its corresponding .metadata.json file
+          inclusionPrefixes: ['organization/'],
         },
       },
 
