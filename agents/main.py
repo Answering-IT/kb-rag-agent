@@ -47,24 +47,22 @@ def remove_thinking_tags(text: str) -> str:
 # Create agent with inference profile ID (Strands automatically detects Bedrock models)
 # Pass the full inference profile ID (with us. prefix) for on-demand throughput
 agent = Agent(
-    model=MODEL_ID,  # us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    model=MODEL_ID,
     tools=[retrieve, http_request],
-    system_prompt="""Eres un asistente que responde preguntas sobre información empresarial y normativa.
+    system_prompt="""Eres un asistente conversacional amigable y útil. Mantienes el contexto de la conversación y recuerdas lo que el usuario te ha dicho.
 
-**Herramientas disponibles:**
-- `retrieve`: Busca información en la base de conocimiento. Usa esta herramienta cuando el usuario haga preguntas sobre información, documentos, o datos específicos.
-- `http_request`: Obtiene contenido de URLs oficiales
+**Herramientas:**
+- `retrieve`: Busca en la base de conocimiento empresarial cuando necesites información específica
+- `http_request`: Obtiene contenido de URLs cuando sea necesario
 
-**Cuándo usar retrieve:**
-- Usuario pregunta sobre información específica
-- Usuario busca documentos o datos
-- Usuario pide explicaciones o resúmenes
+**Comportamiento:**
+- Mantén una conversación natural y recuerda el contexto previo
+- Usa `retrieve` SOLO cuando el usuario necesite información específica de documentos
+- Para conversación general, responde directamente sin buscar
+- Sé conciso pero amigable
+- Si no sabes algo o no está en tu conocimiento, dilo claramente
 
-**Cuándo NO usar retrieve:**
-- Saludos simples ("Hola", "Buenos días")
-- Preguntas generales que no requieren búsqueda
-
-Responde en español de forma clara y profesional."""
+Responde en español de forma natural y conversacional."""
 )
 
 # FastAPI app
@@ -92,12 +90,21 @@ async def invocations_endpoint(request: Request):
             if DEBUG:
                 print(f'[Metadata] Error: {e}')
 
-        # Get session history (simple: keep last 4 messages)
+        # Get session history (keep last 6 messages for better context)
         if session_id not in _sessions:
             _sessions[session_id] = []
-        _sessions[session_id].append({'role': 'user', 'content': input_text[:200]})
-        if len(_sessions[session_id]) > 4:
-            _sessions[session_id] = _sessions[session_id][-4:]
+
+        # Build conversation history for context
+        conversation_context = ""
+        if len(_sessions[session_id]) > 0:
+            recent_messages = _sessions[session_id][-6:]  # Last 3 exchanges
+            for msg in recent_messages:
+                role = "Usuario" if msg['role'] == 'user' else "Asistente"
+                conversation_context += f"{role}: {msg['content']}\n"
+
+        _sessions[session_id].append({'role': 'user', 'content': input_text})
+        if len(_sessions[session_id]) > 8:
+            _sessions[session_id] = _sessions[session_id][-8:]
 
         async def generate():
             try:
@@ -106,18 +113,17 @@ async def invocations_endpoint(request: Request):
                 if _CURRENT_KB_FILTER and DEBUG:
                     print(f'[Filter] Applying: {json.dumps(_CURRENT_KB_FILTER)}')
 
-                # Build enhanced prompt with filter instructions if filter exists
+                # Build enhanced prompt with conversation context and metadata filter
+                enhanced_prompt = input_text
+
+                if conversation_context:
+                    enhanced_prompt = f"Contexto de conversación reciente:\n{conversation_context}\nUsuario actual: {input_text}"
+
                 if _CURRENT_KB_FILTER:
-                    enhanced_prompt = f"""{input_text}
+                    enhanced_prompt += f"""\n\nIMPORTANTE: Si usas 'retrieve', incluye el parámetro 'retrieveFilter':
+{json.dumps(_CURRENT_KB_FILTER, indent=2)}"""
 
-IMPORTANTE: Cuando uses la herramienta 'retrieve', debes incluir el parámetro 'retrieveFilter' con este valor exacto:
-{json.dumps(_CURRENT_KB_FILTER, indent=2)}
-
-Esto filtrará los resultados según los permisos del usuario."""
-                else:
-                    enhanced_prompt = input_text
-
-                # Call agent (it will use retrieve tool automatically if needed)
+                # Call agent with context
                 result = agent(enhanced_prompt)
 
                 # Extract response
@@ -141,8 +147,8 @@ Esto filtrará los resultados según los permisos del usuario."""
                 if DEBUG:
                     print(f'[Response] {len(response_text)} chars')
 
-                # Store in session
-                _sessions[session_id].append({'role': 'assistant', 'content': response_text[:200]})
+                # Store full response in session for context
+                _sessions[session_id].append({'role': 'assistant', 'content': response_text})
 
                 # Stream response
                 words = response_text.split()
