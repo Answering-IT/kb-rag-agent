@@ -95,7 +95,8 @@ class AgentOrchestrator:
     def build_prompt(
         self,
         input_text: str,
-        session_id: str
+        session_id: str,
+        include_context: bool = True
     ) -> str:
         """
         Build enhanced prompt with conversation context.
@@ -103,10 +104,15 @@ class AgentOrchestrator:
         Args:
             input_text: User input
             session_id: Session identifier
+            include_context: Whether to include conversation context (default: True)
 
         Returns:
             Enhanced prompt string
         """
+        # Return just the input if context disabled (helps with max_tokens)
+        if not include_context:
+            return input_text
+
         # Get conversation context
         context = self.session_manager.get_context(session_id)
 
@@ -158,8 +164,8 @@ class AgentOrchestrator:
             # Set filter in retrieve wrapper (will be auto-injected)
             set_retrieve_filter(kb_filter)
 
-            # Build prompt with context (no filter instructions needed)
-            prompt = self.build_prompt(input_text, session_id)
+            # Build prompt WITHOUT context first (to avoid max_tokens issues)
+            prompt = self.build_prompt(input_text, session_id, include_context=False)
 
             # Add user message to session
             self.session_manager.add_message(session_id, 'user', input_text)
@@ -179,8 +185,10 @@ class AgentOrchestrator:
                 response_text = response_text[:self.config.max_response_length]
                 logger.warning(f'[Response] Truncated to {self.config.max_response_length} chars')
 
-            # Store assistant response in session
-            self.session_manager.add_message(session_id, 'assistant', response_text)
+            # Store assistant response in session (truncated for context efficiency)
+            # Only store first 500 chars to avoid bloating context
+            response_summary = response_text[:500] if len(response_text) > 500 else response_text
+            self.session_manager.add_message(session_id, 'assistant', response_summary)
 
             # Stream response in chunks
             words = response_text.split()
@@ -196,13 +204,30 @@ class AgentOrchestrator:
             logger.info(f'[Response] Completed for session {session_id}')
 
         except Exception as e:
-            logger.error(f'[Error] Processing request: {e}', exc_info=True)
+            error_msg = str(e)
 
-            # User-friendly error message
-            yield {
-                "type": "chunk",
-                "data": "Disculpa, tuve un problema procesando tu pregunta."
-            }
+            # Check if it's a max_tokens error
+            if 'max_tokens' in error_msg.lower() or 'MaxTokensReachedException' in error_msg:
+                logger.warning(f'[Error] Max tokens reached for session {session_id}')
+                logger.info(f'[Session] Clearing session context to recover')
+
+                # Clear session to avoid repeated errors
+                self.session_manager.clear_session(session_id)
+
+                # User-friendly error
+                yield {
+                    "type": "chunk",
+                    "data": "La respuesta fue demasiado larga. Por favor, intenta hacer tu pregunta más específica."
+                }
+            else:
+                logger.error(f'[Error] Processing request: {e}', exc_info=True)
+
+                # User-friendly error message
+                yield {
+                    "type": "chunk",
+                    "data": "Disculpa, tuve un problema procesando tu pregunta."
+                }
+
             yield {"type": "complete", "sessionId": session_id}
         finally:
             # Always clear the filter after processing

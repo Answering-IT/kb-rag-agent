@@ -23,6 +23,13 @@ logging.basicConfig(
     format='[%(levelname)s] %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
+
+# Reduce noise from verbose libraries
+logging.getLogger('strands').setLevel(logging.WARNING)
+logging.getLogger('boto3').setLevel(logging.WARNING)
+logging.getLogger('botocore').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # Initialize configuration and orchestrator
