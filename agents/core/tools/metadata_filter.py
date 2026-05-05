@@ -218,8 +218,13 @@ class MetadataFilterBuilder:
         if not conditions:
             return None
 
-        # Build filter with andAll operator (Strands format)
-        filter_dict = {'andAll': conditions}
-
         logger.info(f'[Filter] Built filter with {len(conditions)} conditions')
-        return filter_dict
+
+        # If only one condition, return it directly (andAll requires 2+ conditions)
+        if len(conditions) == 1:
+            logger.info('[Filter] Single condition - returning equals filter directly')
+            return conditions[0]
+
+        # Multiple conditions: use andAll operator (Strands format)
+        logger.info('[Filter] Multiple conditions - using andAll')
+        return {'andAll': conditions}

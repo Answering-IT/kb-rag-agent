@@ -8,11 +8,13 @@ import json
 import logging
 from typing import Dict, Any, AsyncGenerator, Optional
 from strands import Agent
-from strands_tools import retrieve, http_request
+from strands_tools import http_request
 
 from .config import AgentConfig
 from .tools.metadata_filter import MetadataFilterBuilder, RequestMetadata
 from .tools.session_manager import SessionManager
+from .tools import retrieve
+from .tools.retrieve import set_retrieve_filter, clear_retrieve_filter
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ class AgentOrchestrator:
         # Load system prompt
         system_prompt = config.load_system_prompt()
 
-        # Initialize Strands agent with tools
+        # Initialize Strands agent with tools (using wrapped retrieve module)
         self.agent = Agent(
             model=config.model_id,
             tools=[retrieve, http_request],
@@ -93,16 +95,14 @@ class AgentOrchestrator:
     def build_prompt(
         self,
         input_text: str,
-        session_id: str,
-        kb_filter: Optional[Dict[str, Any]] = None
+        session_id: str
     ) -> str:
         """
-        Build enhanced prompt with conversation context and filter instructions.
+        Build enhanced prompt with conversation context.
 
         Args:
             input_text: User input
             session_id: Session identifier
-            kb_filter: Optional KB filter to inject
 
         Returns:
             Enhanced prompt string
@@ -115,17 +115,6 @@ class AgentOrchestrator:
             prompt = f"Contexto de conversación reciente:\n{context}\nUsuario actual: {input_text}"
         else:
             prompt = input_text
-
-        # Add filter instructions if present (internal only, not shown to user)
-        if kb_filter:
-            filter_json = json.dumps(kb_filter, indent=2)
-            prompt += f"""
-
-METADATA FILTERING ACTIVA:
-Cuando uses la herramienta 'retrieve', DEBES incluir este parámetro exacto:
-retrieveFilter={filter_json}
-
-Esto filtrará los resultados según los permisos del usuario. NO omitas este parámetro."""
 
         return prompt
 
@@ -166,8 +155,11 @@ Esto filtrará los resultados según los permisos del usuario. NO omitas este pa
             # Build KB filter
             kb_filter = self.build_filter(metadata)
 
-            # Build prompt with context and filter
-            prompt = self.build_prompt(input_text, session_id, kb_filter)
+            # Set filter in retrieve wrapper (will be auto-injected)
+            set_retrieve_filter(kb_filter)
+
+            # Build prompt with context (no filter instructions needed)
+            prompt = self.build_prompt(input_text, session_id)
 
             # Add user message to session
             self.session_manager.add_message(session_id, 'user', input_text)
@@ -212,6 +204,9 @@ Esto filtrará los resultados según los permisos del usuario. NO omitas este pa
                 "data": "Disculpa, tuve un problema procesando tu pregunta."
             }
             yield {"type": "complete", "sessionId": session_id}
+        finally:
+            # Always clear the filter after processing
+            clear_retrieve_filter()
 
     @staticmethod
     def _extract_response(result) -> str:
