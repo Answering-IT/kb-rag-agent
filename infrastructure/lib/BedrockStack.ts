@@ -28,6 +28,7 @@ export interface BedrockStackProps extends cdk.StackProps {
   vectorsBucket?: s3.IBucket; // REMOVED (Phase 2) - BedrockStack creates own AWS::S3Vectors bucket
   bedrockKBRole: iam.IRole;
   kmsKey: kms.IKey;
+  ocrProcessor: lambda.IFunction; // OCR Lambda from DocumentProcessingStack
 }
 
 export class BedrockStack extends cdk.Stack {
@@ -151,10 +152,10 @@ export class BedrockStack extends cdk.Stack {
         type: 'S3',
         s3Configuration: {
           bucketArn: props.docsBucket.bucketArn,
-          // Scan organizations/ prefix for multi-tenant documents with metadata
-          // Structure: organizations/{org_id}/...
+          // Scan tenant 1 (Colpensiones) for production use
+          // Structure: organizations/1/...
           // Each file must have its corresponding .metadata.json file
-          inclusionPrefixes: ['organizations/'],
+          inclusionPrefixes: ['organizations/1/'],
         },
       },
 
@@ -250,6 +251,74 @@ export class BedrockStack extends cdk.Stack {
       value: syncFunction.functionArn,
       description: 'KB sync function ARN',
       exportName: `processapp-kb-sync-function-${props.stage}-${region}`,
+    });
+
+    // ========================================
+    // Ingestion Failure Handler Lambda
+    // ========================================
+    // Captures Bedrock KB ingestion job failures and invokes OCR Lambda
+    // for recoverable errors (images/PDFs without text)
+
+    const ingestionFailureHandler = new lambda.Function(this, 'IngestionFailureHandler', {
+      functionName: `processapp-kb-ingestion-failure-${props.stage}`,
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(
+        path.join(__dirname as any, '../lambdas/ingestion-failure-handler')
+      ),
+      environment: {
+        KNOWLEDGE_BASE_ID: this.knowledgeBaseId,
+        DATA_SOURCE_ID: this.dataSourceId,
+        OCR_LAMBDA_ARN: props.ocrProcessor.functionArn,
+        DOCS_BUCKET: props.docsBucket.bucketName,
+      },
+      timeout: cdk.Duration.minutes(5),
+      memorySize: 256,
+    });
+
+    // Grant permissions to get ingestion job details
+    ingestionFailureHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'bedrock:GetIngestionJob',
+          'bedrock:ListIngestionJobs',
+        ],
+        resources: [
+          `arn:aws:bedrock:${region}:${props.accountId}:knowledge-base/${this.knowledgeBaseId}`,
+        ],
+      })
+    );
+
+    // Grant permission to invoke OCR Lambda
+    props.ocrProcessor.grantInvoke(ingestionFailureHandler);
+
+    // ========================================
+    // EventBridge Rule for Ingestion Events
+    // ========================================
+    // Captures Bedrock KB ingestion job state changes (COMPLETE, FAILED)
+
+    const ingestionEventRule = new events.Rule(this, 'IngestionEventRule', {
+      ruleName: `processapp-kb-ingestion-${props.stage}`,
+      description: 'Capture Bedrock KB ingestion job completions',
+      eventPattern: {
+        source: ['aws.bedrock'],
+        detailType: ['Bedrock Knowledge Base Ingestion Job State Change'],
+        detail: {
+          knowledgeBaseId: [this.knowledgeBaseId],
+          status: ['COMPLETE', 'FAILED'],
+        },
+      },
+    });
+
+    ingestionEventRule.addTarget(
+      new targets.LambdaFunction(ingestionFailureHandler)
+    );
+
+    // CloudFormation Outputs
+    new cdk.CfnOutput(this, 'IngestionFailureHandlerArn', {
+      value: ingestionFailureHandler.functionArn,
+      description: 'Ingestion failure handler function ARN',
+      exportName: `processapp-kb-ingestion-failure-handler-${props.stage}-${region}`,
     });
   }
 }

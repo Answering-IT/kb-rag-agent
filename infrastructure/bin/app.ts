@@ -68,20 +68,8 @@ SDLCAccounts.forEach((account) => {
       );
       securityStack.addDependency(prereqsStack);
 
-      const bedrockStack = new BedrockStack(
-        app,
-        `${account.stage}-${region}-bedrock`,
-        {
-          stage: account.stage,
-          accountId: account.id,
-          docsBucket: prereqsStack.docsBucket,
-          bedrockKBRole: prereqsStack.bedrockKBRole,
-          kmsKey: prereqsStack.kmsKey,
-          env,
-        }
-      );
-      bedrockStack.addDependency(securityStack);
-
+      // Create DocumentProcessingStack BEFORE BedrockStack
+      // BedrockStack needs ocrProcessor from DocumentProcessingStack
       const docProcessingStack = new DocumentProcessingStack(
         app,
         `${account.stage}-${region}-document-processing`,
@@ -94,6 +82,21 @@ SDLCAccounts.forEach((account) => {
         }
       );
       docProcessingStack.addDependency(securityStack);
+
+      const bedrockStack = new BedrockStack(
+        app,
+        `${account.stage}-${region}-bedrock`,
+        {
+          stage: account.stage,
+          accountId: account.id,
+          docsBucket: prereqsStack.docsBucket,
+          bedrockKBRole: prereqsStack.bedrockKBRole,
+          kmsKey: prereqsStack.kmsKey,
+          ocrProcessor: docProcessingStack.ocrProcessor, // Pass OCR Lambda
+          env,
+        }
+      );
+      bedrockStack.addDependency(securityStack);
 
       const guardrailsStack = new GuardrailsStack(
         app,
