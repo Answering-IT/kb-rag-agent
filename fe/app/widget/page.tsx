@@ -7,7 +7,7 @@ import { getTranslations } from '@/lib/translations';
 import { useMetadata } from '@/contexts/MetadataContext';
 
 interface WidgetMessage {
-  type: 'INIT' | 'SEND_MESSAGE';
+  type: 'INIT' | 'SEND_MESSAGE' | 'UPDATE_METADATA';
   data?: any;
 }
 
