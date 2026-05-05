@@ -153,17 +153,11 @@ class MetadataFilterBuilder:
 
         conditions = []
 
-        # Required: tenant_id
+        # Required: tenant_id (but we'll use partition_key for filtering, tenant_id just for validation)
         if not metadata.tenant_id:
             logger.warning('[Filter] No tenant_id - unrestricted access')
             return None
 
-        conditions.append({
-            'equals': {
-                'key': 'tenant_id',
-                'value': str(metadata.tenant_id)
-            }
-        })
         logger.info(f'[Filter] ✅ tenant_id: {metadata.tenant_id}')
 
         # Build partition_key based on hierarchy
@@ -192,18 +186,24 @@ class MetadataFilterBuilder:
             if partition_key:
                 conditions.append({
                     'equals': {
-                        'key': 'project_id',
-                        'value': str(metadata.project_id)
-                    }
-                })
-                conditions.append({
-                    'equals': {
                         'key': 'partition_key',
                         'value': partition_key
                     }
                 })
                 logger.info(f'[Filter] ✅ project_id: {metadata.project_id}')
                 logger.info(f'[Filter] ✅ partition_key (project): {partition_key}')
+
+        else:
+            # Tenant-only: ONLY tenant-level documents (partition_key = "t{tenant}")
+            # This prevents seeing project/task documents
+            tenant_partition_key = f"t{metadata.tenant_id}"
+            conditions.append({
+                'equals': {
+                    'key': 'partition_key',
+                    'value': tenant_partition_key
+                }
+            })
+            logger.info(f'[Filter] ✅ partition_key (tenant-only): {tenant_partition_key}')
 
         # Optional: subtask_id
         if metadata.subtask_id:
