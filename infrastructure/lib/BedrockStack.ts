@@ -16,6 +16,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
+import * as path from 'path';
 import { CfnIndex } from 'aws-cdk-lib/aws-s3vectors';
 import { Construct } from 'constructs';
 import { KnowledgeBaseConfig, ProcessingConfig } from '../config/environments';
@@ -51,7 +52,7 @@ export class BedrockStack extends cdk.Stack {
     // ========================================
 
     const vectorBucketName = `processapp-vectors-${props.stage}-${props.accountId}`;
-    const vectorIndexName = `${kbName}-vector-index-v3`;
+    const vectorIndexName = `${kbName}-vector-index`;
 
     // Create S3 Vector Bucket using native CloudFormation
     const vectorBucket = new cdk.CfnResource(this, 'VectorBucket', {
@@ -140,8 +141,8 @@ export class BedrockStack extends cdk.Stack {
     // DATA SOURCE (S3)
     // ========================================
 
-    const dataSource = new bedrock.CfnDataSource(this, 'DataSourceV2', {
-      name: `${kbName}-datasource-v2`,
+    const dataSource = new bedrock.CfnDataSource(this, 'DataSource', {
+      name: `${kbName}-datasource`,
       description: 'S3 data source for document ingestion with non-filterable metadata',
       knowledgeBaseId: this.knowledgeBaseId,
 
@@ -181,38 +182,9 @@ export class BedrockStack extends cdk.Stack {
       functionName: `processapp-kb-sync-${props.stage}`,
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.handler',
-      code: lambda.Code.fromInline(`
-import boto3
-import os
-import json
-
-bedrock_agent = boto3.client('bedrock-agent')
-
-def handler(event, context):
-    kb_id = os.environ['KNOWLEDGE_BASE_ID']
-    ds_id = os.environ['DATA_SOURCE_ID']
-
-    print(f'Starting sync for KB: {kb_id}, DataSource: {ds_id}')
-
-    try:
-        response = bedrock_agent.start_ingestion_job(
-            knowledgeBaseId=kb_id,
-            dataSourceId=ds_id
-        )
-
-        print(f'Sync started: {json.dumps(response)}')
-
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'message': 'Sync started successfully',
-                'ingestionJobId': response.get('ingestionJob', {}).get('ingestionJobId')
-            })
-        }
-    except Exception as e:
-        print(f'Error starting sync: {str(e)}')
-        raise
-      `),
+      code: lambda.Code.fromAsset(
+        path.join(__dirname as any, '../lambdas/kb-sync')
+      ),
       environment: {
         KNOWLEDGE_BASE_ID: this.knowledgeBaseId,
         DATA_SOURCE_ID: this.dataSourceId,

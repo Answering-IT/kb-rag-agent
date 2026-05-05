@@ -8,7 +8,6 @@ import json
 import logging
 from typing import Dict, Any, AsyncGenerator, Optional
 from strands import Agent
-from strands_tools import http_request
 
 from .config import AgentConfig
 from .tools.metadata_filter import MetadataFilterBuilder, RequestMetadata
@@ -49,7 +48,7 @@ class AgentOrchestrator:
         # Initialize Strands agent with tools (using wrapped retrieve module)
         self.agent = Agent(
             model=config.model_id,
-            tools=[retrieve, http_request],
+            tools=[retrieve],
             system_prompt=system_prompt
         )
 
@@ -265,7 +264,7 @@ class AgentOrchestrator:
             "model": self.config.model_id,
             "region": self.config.region,
             "kb_id": self.config.kb_id,
-            "tools": ["retrieve", "http_request"],
+            "tools": ["retrieve"],
             "provider": "bedrock",
             "sessions": self.session_manager.get_session_count(),
             "version": "2.0.0"

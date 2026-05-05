@@ -354,6 +354,27 @@ npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --verbose
 2. Verify documents in `documents/` prefix (not root)
 3. Trigger manual sync (see "Trigger Knowledge Base Sync" above)
 
+### Metadata Files Missing KB Wrapper
+
+If metadata files are missing the `metadataAttributes` wrapper:
+
+```bash
+# Fix all .metadata.json files in S3
+python3 scripts/fix-s3-metadata-wrapper.py
+
+# Trigger KB sync to apply changes
+aws bedrock-agent start-ingestion-job \
+  --knowledge-base-id BLJTRDGQI0 \
+  --data-source-id B1OGNN9EMU \
+  --profile ans-super
+```
+
+**What it fixes:**
+- Before: `{"tenant_id": "100001", "partition_key": "t100001"}`
+- After: `{"metadataAttributes": {"tenant_id": "100001", "partition_key": "t100001"}}`
+
+The script processes all `.metadata.json` files recursively and preserves existing wrappers (idempotent).
+
 ---
 
 ## Frontend - Chat Interface
@@ -627,8 +648,8 @@ Full technical documentation available in:
 - ✅ Removed `agents/IMPLEMENTATION_SUMMARY.md`
 
 **Current Status:**
-- Knowledge Base ID: R80HXGRLHO
-- DataSource ID: TQRXQZIMTS (recreated with new chunking config)
+- Knowledge Base ID: BLJTRDGQI0
+- DataSource ID: B1OGNN9EMU (recreated with new chunking config)
 - All infrastructure verified and connected
 - CloudFormation exports updated with new DataSource ID
 - Sync Lambda has correct DATA_SOURCE_ID environment variable
@@ -650,17 +671,19 @@ Full technical documentation available in:
 
 **Test with:**
 ```bash
-wscat -c wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
+wscat -c wss://6aqhp0u2zk.execute-api.us-east-1.amazonaws.com/dev
 {"action":"sendMessage","data":{"inputText":"¿Cómo me puedes ayudar?","sessionId":"test-123"}}
 ```
 
 ---
 
-**Last Updated:** 2026-05-03  
+**Last Updated:** 2026-05-05  
 **Primary Stack:** Agent V2 (Agent Core Runtime with Strand SDK)  
 **Frontend Version:** v0.0.1 (Spanish default, WebSocket default)  
 **AWS Account:** 708819485463 (dev)  
 **AWS Profile:** ans-super  
-**WebSocket URL:** `wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev`  
-**Knowledge Base ID:** R80HXGRLHO  
-**DataSource ID:** TQRXQZIMTS (chunking: 2000 tokens, 10% overlap)
+**WebSocket URL:** `wss://6aqhp0u2zk.execute-api.us-east-1.amazonaws.com/dev`  
+**Knowledge Base ID:** BLJTRDGQI0  
+**DataSource ID:** B1OGNN9EMU (chunking: 2000 tokens, 10% overlap)  
+**Runtime ID:** processapp_agent_runtime_dev-l9vO3UDmJ4  
+**Memory ID:** processapp_agent_memory_dev-DDbbNMBApu

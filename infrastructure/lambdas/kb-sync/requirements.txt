@@ -1,0 +1,3 @@
+# Knowledge Base Sync Lambda Dependencies
+# boto3 is pre-installed in Lambda runtime, but specified for documentation
+boto3>=1.34.0
