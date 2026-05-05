@@ -42,21 +42,21 @@ export class AgentStackV2 extends cdk.Stack {
     super(scope, id, props);
 
     const region = cdk.Stack.of(this).region;
-    const runtimeName = `processapp_agent_runtime_v2_${props.stage}`;
+    const runtimeName = `processapp_agent_runtime_${props.stage}`;
 
     // Apply cost allocation tags
     cdk.Tags.of(this).add('Environment', props.stage);
     cdk.Tags.of(this).add('Application', 'processapp');
-    cdk.Tags.of(this).add('Component', 'rag-agent-v2-strand');
+    cdk.Tags.of(this).add('Component', 'rag-agent-strand');
 
     // ========================================
     // IAM ROLE FOR RUNTIME
     // ========================================
 
     const runtimeRole = new iam.Role(this, 'RuntimeRole', {
-      roleName: `processapp-runtime-v2-role-${props.stage}`,
+      roleName: `processapp-runtime-role-${props.stage}`,
       assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
-      description: 'Execution role for ProcessApp Agent Core Runtime v2 (Strand)',
+      description: 'Execution role for ProcessApp Agent Core Runtime (Strand)',
       maxSessionDuration: cdk.Duration.hours(1),
     });
 
@@ -129,8 +129,8 @@ export class AgentStackV2 extends cdk.Stack {
     // SHORT_TERM: Raw event memory with 7-day retention (minimum allowed by AWS)
     // No long-term extraction strategies - only raw conversation events
     const memory = new agentcore.Memory(this, 'AgentMemoryV2', {
-      memoryName: `processapp_agent_memory_v2_${props.stage}`,
-      description: 'Short-term conversation memory for ProcessApp Agent v2 (Strand)',
+      memoryName: `processapp_agent_memory_${props.stage}`,
+      description: 'Short-term conversation memory for ProcessApp Agent  (Strand)',
       expirationDuration: cdk.Duration.days(7), // Minimum: 7 days, Maximum: 365 days
     });
 
@@ -172,7 +172,7 @@ export class AgentStackV2 extends cdk.Stack {
 
     const runtime = new agentcore.Runtime(this, 'AgentRuntimeV2', {
       runtimeName: runtimeName,
-      description: 'ProcessApp Agent Core Runtime v2 using Strand Agents SDK',
+      description: 'ProcessApp Agent Core Runtime  using Strand Agents SDK',
       agentRuntimeArtifact: agentCode,
       executionRole: runtimeRole,
 
@@ -226,7 +226,7 @@ export class AgentStackV2 extends cdk.Stack {
 
     const runtimeEndpoint = new agentcore.RuntimeEndpoint(this, 'RuntimeEndpointV2', {
       agentRuntimeId: runtime.agentRuntimeId,
-      endpointName: `processapp_endpoint_v2_${props.stage}`,
+      endpointName: `processapp_endpoint_${props.stage}`,
     });
 
     // The endpoint URL is constructed from the endpoint ID
@@ -238,44 +238,44 @@ export class AgentStackV2 extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'RuntimeIdV2', {
       value: this.runtimeId,
-      description: 'Agent Core Runtime v2 ID (Strand)',
-      exportName: `processapp-runtime-v2-id-${props.stage}-${region}`,
+      description: 'Agent Core Runtime  ID (Strand)',
+      exportName: `processapp-runtime-id-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'RuntimeArnV2', {
       value: this.runtimeArn,
-      description: 'Agent Core Runtime v2 ARN',
-      exportName: `processapp-runtime-v2-arn-${props.stage}-${region}`,
+      description: 'Agent Core Runtime  ARN',
+      exportName: `processapp-runtime-arn-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'RuntimeEndpointUrlV2', {
       value: this.endpointUrl,
-      description: 'Agent Core Runtime v2 HTTPS Endpoint URL',
-      exportName: `processapp-runtime-v2-endpoint-${props.stage}-${region}`,
+      description: 'Agent Core Runtime  HTTPS Endpoint URL',
+      exportName: `processapp-runtime-endpoint-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'RuntimeNameV2', {
       value: this.runtime.agentRuntimeName,
-      description: 'Agent Core Runtime v2 Name',
-      exportName: `processapp-runtime-v2-name-${props.stage}-${region}`,
+      description: 'Agent Core Runtime  Name',
+      exportName: `processapp-runtime-name-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'MemoryIdV2', {
       value: this.memoryId,
-      description: 'Agent Core Memory v2 ID',
-      exportName: `processapp-memory-v2-id-${props.stage}-${region}`,
+      description: 'Agent Core Memory  ID',
+      exportName: `processapp-memory-id-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'MemoryArnV2', {
       value: this.memoryArn,
-      description: 'Agent Core Memory v2 ARN',
-      exportName: `processapp-memory-v2-arn-${props.stage}-${region}`,
+      description: 'Agent Core Memory  ARN',
+      exportName: `processapp-memory-arn-${props.stage}-${region}`,
     });
 
     new cdk.CfnOutput(this, 'RuntimeLogGroupV2', {
       value: runtimeLogGroup.logGroupName,
-      description: 'CloudWatch Log Group for Agent Runtime v2',
-      exportName: `processapp-runtime-v2-loggroup-${props.stage}-${region}`,
+      description: 'CloudWatch Log Group for Agent Runtime ',
+      exportName: `processapp-runtime-loggroup-${props.stage}-${region}`,
     });
 
     // ========================================
@@ -302,7 +302,7 @@ export class AgentStackV2 extends cdk.Stack {
     //
     // 4. Endpoint:
     //    - Stable HTTPS endpoint for invocation
-    //    - Version management (can deploy v2, v3, etc.)
+    //    - Version management (can deploy , v3, etc.)
     //    - IAM authentication
     //
     // 5. Integration:

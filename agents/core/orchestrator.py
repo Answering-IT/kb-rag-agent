@@ -1,0 +1,271 @@
+"""
+Agent Orchestrator
+Clean orchestration layer for ProcessApp Agent using Strands SDK.
+"""
+
+import re
+import json
+import logging
+from typing import Dict, Any, AsyncGenerator, Optional
+from strands import Agent
+
+from .config import AgentConfig
+from .tools.metadata_filter import MetadataFilterBuilder, RequestMetadata
+from .tools.session_manager import SessionManager
+from .tools import retrieve
+from .tools.retrieve import set_retrieve_filter, clear_retrieve_filter
+
+logger = logging.getLogger(__name__)
+
+
+class AgentOrchestrator:
+    """
+    Orchestrates agent operations with clean separation of concerns.
+
+    Responsibilities:
+        - Configure Strands agent with tools
+        - Handle metadata filtering
+        - Manage conversation sessions
+        - Stream responses to clients
+    """
+
+    def __init__(self, config: AgentConfig):
+        """
+        Initialize orchestrator.
+
+        Args:
+            config: Agent configuration
+        """
+        self.config = config
+        self.session_manager = SessionManager(
+            max_messages=config.max_session_messages,
+            context_messages=config.context_messages
+        )
+
+        # Load system prompt
+        system_prompt = config.load_system_prompt()
+
+        # Initialize Strands agent with tools (using wrapped retrieve module)
+        self.agent = Agent(
+            model=config.model_id,
+            tools=[retrieve],
+            system_prompt=system_prompt
+        )
+
+        logger.info('✅ Agent orchestrator initialized')
+
+    def extract_metadata(self, headers: Dict[str, str], body: Dict[str, Any]) -> RequestMetadata:
+        """
+        Extract metadata from request.
+
+        Args:
+            headers: HTTP request headers
+            body: Request body
+
+        Returns:
+            RequestMetadata object
+        """
+        metadata = MetadataFilterBuilder.extract_from_request(headers, body)
+
+        logger.info(f'[Request] Extracted metadata: tenant={metadata.tenant_id}, '
+                   f'project={metadata.project_id}, task={metadata.task_id}')
+
+        return metadata
+
+    def build_filter(self, metadata: RequestMetadata) -> Optional[Dict[str, Any]]:
+        """
+        Build Bedrock KB retrieveFilter from metadata.
+
+        Args:
+            metadata: Request metadata
+
+        Returns:
+            Filter dict compatible with Strands retrieve tool, or None
+        """
+        kb_filter = MetadataFilterBuilder.build_filter(metadata)
+
+        if kb_filter:
+            logger.info(f'[Filter] Built: {json.dumps(kb_filter, indent=2)}')
+        else:
+            logger.info('[Filter] No filter (unrestricted access)')
+
+        return kb_filter
+
+    def build_prompt(
+        self,
+        input_text: str,
+        session_id: str,
+        include_context: bool = True
+    ) -> str:
+        """
+        Build enhanced prompt with conversation context.
+
+        Args:
+            input_text: User input
+            session_id: Session identifier
+            include_context: Whether to include conversation context (default: True)
+
+        Returns:
+            Enhanced prompt string
+        """
+        # Return just the input if context disabled (helps with max_tokens)
+        if not include_context:
+            return input_text
+
+        # Get conversation context
+        context = self.session_manager.get_context(session_id)
+
+        # Build prompt with context
+        if context:
+            prompt = f"Contexto de conversación reciente:\n{context}\nUsuario actual: {input_text}"
+        else:
+            prompt = input_text
+
+        return prompt
+
+    @staticmethod
+    def remove_thinking_tags(text: str) -> str:
+        """
+        Remove <thinking>...</thinking> tags from model responses.
+
+        Args:
+            text: Response text
+
+        Returns:
+            Cleaned text without thinking tags
+        """
+        cleaned = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)  # Remove extra blank lines
+        return cleaned.strip()
+
+    async def process_request(
+        self,
+        input_text: str,
+        session_id: str,
+        metadata: RequestMetadata
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Process user request and stream response.
+
+        Args:
+            input_text: User input
+            session_id: Session identifier
+            metadata: Request metadata
+
+        Yields:
+            Response chunks: {"type": "chunk", "data": "..."}
+            Completion: {"type": "complete", "sessionId": "..."}
+        """
+        try:
+            # Build KB filter
+            kb_filter = self.build_filter(metadata)
+
+            # Set filter in retrieve wrapper (will be auto-injected)
+            set_retrieve_filter(kb_filter)
+
+            # Build prompt WITHOUT context first (to avoid max_tokens issues)
+            prompt = self.build_prompt(input_text, session_id, include_context=False)
+
+            # Add user message to session
+            self.session_manager.add_message(session_id, 'user', input_text)
+
+            # Call agent
+            logger.info(f'[Agent] Calling model with prompt length: {len(prompt)} chars')
+            result = self.agent(prompt)
+
+            # Extract response text
+            response_text = self._extract_response(result)
+
+            # Clean response
+            response_text = self.remove_thinking_tags(response_text)
+
+            # Limit response length
+            if len(response_text) > self.config.max_response_length:
+                response_text = response_text[:self.config.max_response_length]
+                logger.warning(f'[Response] Truncated to {self.config.max_response_length} chars')
+
+            # Store assistant response in session (truncated for context efficiency)
+            # Only store first 500 chars to avoid bloating context
+            response_summary = response_text[:500] if len(response_text) > 500 else response_text
+            self.session_manager.add_message(session_id, 'assistant', response_summary)
+
+            # Stream response in chunks
+            words = response_text.split()
+            chunk_size = self.config.response_chunk_size
+
+            for i in range(0, len(words), chunk_size):
+                chunk = " ".join(words[i:i + chunk_size]) + " "
+                yield {"type": "chunk", "data": chunk}
+
+            # Completion marker
+            yield {"type": "complete", "sessionId": session_id}
+
+            logger.info(f'[Response] Completed for session {session_id}')
+
+        except Exception as e:
+            error_msg = str(e)
+
+            # Check if it's a max_tokens error
+            if 'max_tokens' in error_msg.lower() or 'MaxTokensReachedException' in error_msg:
+                logger.warning(f'[Error] Max tokens reached for session {session_id}')
+                logger.info(f'[Session] Clearing session context to recover')
+
+                # Clear session to avoid repeated errors
+                self.session_manager.clear_session(session_id)
+
+                # User-friendly error
+                yield {
+                    "type": "chunk",
+                    "data": "La respuesta fue demasiado larga. Por favor, intenta hacer tu pregunta más específica."
+                }
+            else:
+                logger.error(f'[Error] Processing request: {e}', exc_info=True)
+
+                # User-friendly error message
+                yield {
+                    "type": "chunk",
+                    "data": "Disculpa, tuve un problema procesando tu pregunta."
+                }
+
+            yield {"type": "complete", "sessionId": session_id}
+        finally:
+            # Always clear the filter after processing
+            clear_retrieve_filter()
+
+    @staticmethod
+    def _extract_response(result) -> str:
+        """
+        Extract response text from agent result.
+
+        Args:
+            result: Agent result object
+
+        Returns:
+            Response text string
+        """
+        if hasattr(result, 'output'):
+            return result.output
+        elif hasattr(result, 'content'):
+            return result.content
+        elif hasattr(result, 'text'):
+            return result.text
+        else:
+            return str(result)
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """
+        Get agent health status.
+
+        Returns:
+            Health status dict
+        """
+        return {
+            "status": "healthy",
+            "model": self.config.model_id,
+            "region": self.config.region,
+            "kb_id": self.config.kb_id,
+            "tools": ["retrieve"],
+            "provider": "bedrock",
+            "sessions": self.session_manager.get_session_count(),
+            "version": "2.0.0"
+        }

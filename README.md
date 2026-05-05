@@ -25,7 +25,7 @@ npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval nev
 | **Compile** | `cd infrastructure && npm run build` |
 | **Deploy Agent V2** | `cd infrastructure && npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval never` |
 | **Check compilation** | `cd infrastructure && npm run build` (no errors = success) |
-| **View logs** | `aws logs tail /aws/bedrock/agentcore/runtime/processapp_agent_runtime_v2_dev --follow --profile ans-super` |
+| **View logs** | `aws logs tail /aws/bedrock/agentcore/runtime/processapp_agent_runtime_dev --follow --profile ans-super` |
 | **Get outputs** | `aws cloudformation describe-stacks --stack-name dev-us-east-1-agent-v2 --query 'Stacks[0].Outputs' --profile ans-super` |
 | **Verify AWS profile** | `aws sts get-caller-identity --profile ans-super` |
 
@@ -72,7 +72,7 @@ npx cdk deploy dev-us-east-1-agent-v2 --profile ans-super --require-approval nev
 npm install -g wscat
 
 # Connect
-wscat -c wss://0wyp9wnba7.execute-api.us-east-1.amazonaws.com/dev
+wscat -c wss://6aqhp0u2zk.execute-api.us-east-1.amazonaws.com/dev
 
 # Send message
 {"action":"sendMessage","data":{"inputText":"¿Cómo me puedes ayudar?","sessionId":"test-123"}}

@@ -33,16 +33,16 @@ export class WebSocketStackV2 extends cdk.Stack {
     // Apply cost allocation tags
     cdk.Tags.of(this).add('Environment', props.stage);
     cdk.Tags.of(this).add('Application', 'processapp');
-    cdk.Tags.of(this).add('Component', 'rag-websocket-v2');
+    cdk.Tags.of(this).add('Component', 'rag-websocket');
 
     // ========================================
     // IAM ROLE FOR LAMBDA (v2)
     // ========================================
 
-    const wsHandlerRole = new iam.Role(this, 'WebSocketHandlerRoleV2', {
-      roleName: `processapp-ws-handler-role-v2-${props.stage}`,
+    const wsHandlerRole = new iam.Role(this, 'WebSocketHandlerRole', {
+      roleName: `processapp-ws-handler-role-${props.stage}`,
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Role for WebSocket message handler Lambda (Agent Core v2)',
+      description: 'Role for WebSocket message handler Lambda (Agent Core)',
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName(
           'service-role/AWSLambdaBasicExecutionRole'
@@ -102,8 +102,8 @@ export class WebSocketStackV2 extends cdk.Stack {
     // MESSAGE HANDLER LAMBDA (v2)
     // ========================================
 
-    this.messageHandler = new lambda.Function(this, 'MessageHandlerV2', {
-      functionName: `processapp-ws-message-v2-${props.stage}`,
+    this.messageHandler = new lambda.Function(this, 'MessageHandler', {
+      functionName: `processapp-ws-message-${props.stage}`,
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'message_handler.handler',
       code: lambda.Code.fromAsset(
@@ -119,7 +119,7 @@ export class WebSocketStackV2 extends cdk.Stack {
         AWS_ACCOUNT_ID: props.accountId,
         // No CONVERSATION_TABLE needed - Agent Core Memory handles it
       },
-      description: 'WebSocket message handler for Agent Core v2 (no manual memory)',
+      description: 'WebSocket message handler for Agent Core (no manual memory)',
       tracing: lambda.Tracing.ACTIVE,
     });
 
@@ -127,8 +127,8 @@ export class WebSocketStackV2 extends cdk.Stack {
     // CONNECT HANDLER LAMBDA (v2)
     // ========================================
 
-    const connectHandler = new lambda.Function(this, 'ConnectHandlerV2', {
-      functionName: `processapp-ws-connect-v2-${props.stage}`,
+    const connectHandler = new lambda.Function(this, 'ConnectHandler', {
+      functionName: `processapp-ws-connect-${props.stage}`,
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'connect_handler.handler',
       code: lambda.Code.fromAsset(
@@ -139,15 +139,15 @@ export class WebSocketStackV2 extends cdk.Stack {
       environment: {
         STAGE: props.stage,
       },
-      description: 'WebSocket connect handler v2',
+      description: 'WebSocket connect handler',
     });
 
     // ========================================
     // DISCONNECT HANDLER LAMBDA (v2)
     // ========================================
 
-    const disconnectHandler = new lambda.Function(this, 'DisconnectHandlerV2', {
-      functionName: `processapp-ws-disconnect-v2-${props.stage}`,
+    const disconnectHandler = new lambda.Function(this, 'DisconnectHandler', {
+      functionName: `processapp-ws-disconnect-${props.stage}`,
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'disconnect_handler.handler',
       code: lambda.Code.fromAsset(
@@ -158,31 +158,31 @@ export class WebSocketStackV2 extends cdk.Stack {
       environment: {
         STAGE: props.stage,
       },
-      description: 'WebSocket disconnect handler v2',
+      description: 'WebSocket disconnect handler',
     });
 
     // ========================================
     // WEBSOCKET API (v2)
     // ========================================
 
-    this.webSocketApi = new apigatewayv2.WebSocketApi(this, 'AgentWebSocketV2', {
-      apiName: `processapp-agent-ws-v2-${props.stage}`,
-      description: 'WebSocket API for Bedrock Agent Core v2 streaming',
+    this.webSocketApi = new apigatewayv2.WebSocketApi(this, 'AgentWebSocket', {
+      apiName: `processapp-agent-ws-${props.stage}`,
+      description: 'WebSocket API for Bedrock Agent Core streaming',
       connectRouteOptions: {
         integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
-          'ConnectIntegrationV2',
+          'ConnectIntegration',
           connectHandler
         ),
       },
       disconnectRouteOptions: {
         integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
-          'DisconnectIntegrationV2',
+          'DisconnectIntegration',
           disconnectHandler
         ),
       },
       defaultRouteOptions: {
         integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
-          'MessageIntegrationV2',
+          'MessageIntegration',
           this.messageHandler
         ),
       },
@@ -192,7 +192,7 @@ export class WebSocketStackV2 extends cdk.Stack {
     // WEBSOCKET STAGE (v2)
     // ========================================
 
-    const wsStage = new apigatewayv2.WebSocketStage(this, 'WebSocketStageV2', {
+    const wsStage = new apigatewayv2.WebSocketStage(this, 'WebSocketStage', {
       webSocketApi: this.webSocketApi,
       stageName: props.stage,
       autoDeploy: true,
@@ -214,27 +214,27 @@ export class WebSocketStackV2 extends cdk.Stack {
     // OUTPUTS
     // ========================================
 
-    new cdk.CfnOutput(this, 'WebSocketURLV2', {
+    new cdk.CfnOutput(this, 'WebSocketURL', {
       value: this.webSocketUrl,
-      description: 'WebSocket URL for Agent Core v2',
-      exportName: `processapp-websocket-url-v2-${props.stage}-${region}`,
+      description: 'WebSocket URL for Agent Core',
+      exportName: `processapp-websocket-url-${props.stage}-${region}`,
     });
 
-    new cdk.CfnOutput(this, 'WebSocketApiIdV2', {
+    new cdk.CfnOutput(this, 'WebSocketApiId', {
       value: this.webSocketApi.apiId,
-      description: 'WebSocket API ID v2',
-      exportName: `processapp-websocket-api-id-v2-${props.stage}-${region}`,
+      description: 'WebSocket API ID',
+      exportName: `processapp-websocket-api-id-${props.stage}-${region}`,
     });
 
-    new cdk.CfnOutput(this, 'WebSocketConnectionCommandV2', {
+    new cdk.CfnOutput(this, 'WebSocketConnectionCommand', {
       value: `wscat -c ${this.webSocketUrl}`,
-      description: 'Command to connect to WebSocket v2',
+      description: 'Command to connect to WebSocket',
     });
 
-    new cdk.CfnOutput(this, 'MessageHandlerArnV2', {
+    new cdk.CfnOutput(this, 'MessageHandlerArn', {
       value: this.messageHandler.functionArn,
-      description: 'Message handler Lambda ARN v2',
-      exportName: `processapp-ws-message-arn-v2-${props.stage}-${region}`,
+      description: 'Message handler Lambda ARN',
+      exportName: `processapp-ws-message-arn-${props.stage}-${region}`,
     });
   }
 }
