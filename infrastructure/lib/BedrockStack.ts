@@ -150,9 +150,10 @@ export class BedrockStack extends cdk.Stack {
         type: 'S3',
         s3Configuration: {
           bucketArn: props.docsBucket.bucketArn,
-          // Scan organization/ prefix for migrated Colpensiones documents with metadata
+          // Scan organizations/ prefix for multi-tenant documents with metadata
+          // Structure: organizations/{org_id}/...
           // Each file must have its corresponding .metadata.json file
-          inclusionPrefixes: ['organization/'],
+          inclusionPrefixes: ['organizations/'],
         },
       },
 
